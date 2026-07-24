@@ -3,7 +3,10 @@
 
 # stellar-jira
 
-**Stellar Cyber ↔ Jira AIxSOC** 中介層（獨立專案，不含 Cortex XDR）。
+**Stellar Cyber ↔ Jira AIxSOC** 中介層 + **xMDR Web**（`web/`）。
+
+> **地端新機 Git 部署：** [`docs/PRODUCTION_DEPLOY_ONPREM.md`](docs/PRODUCTION_DEPLOY_ONPREM.md)  
+> `git clone https://github.com/9-Security/stellar-jira.git` → `sudo ./scripts/onprem_bootstrap.sh`
 
 > **現行行為（給人與 AI）**：請先讀 [`docs/CURRENT_RUNTIME.md`](docs/CURRENT_RUNTIME.md)。  
 > 過時規格在 [`docs/archive/`](docs/archive/) — **預設不要讀**。
