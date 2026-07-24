@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+export PYTHONPATH="$ROOT"
+VENV_PY="$ROOT/.venv/bin/python3"
+
+ensure_venv() {
+  if [[ -x "$VENV_PY" ]]; then
+    return 0
+  fi
+  echo "[ticket-api-stellar] Creating virtualenv (first run only)..." >&2
+  python3 -m venv "$ROOT/.venv"
+  "$ROOT/.venv/bin/pip" install -q --upgrade pip
+  "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt"
+}
+
+ensure_venv
+if [[ ! -f "$ROOT/.env" ]] && [[ -z "${STELLAR_API_KEY:-}" ]]; then
+  echo "[ticket-api-stellar] Missing credentials: cp env.example .env and set STELLAR_* / JIRA_*." >&2
+  exit 1
+fi
+
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-8000}"
+exec "$VENV_PY" -m uvicorn app.main:app --host "$HOST" --port "$PORT"

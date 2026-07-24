@@ -1,0 +1,17 @@
+# Cloudflare Tunnel (remote-managed) — token from API setup script.
+# CLOUDFLARE_TUNNEL_TOKEN_FILE is substituted by scripts/setup_cloudflare_tunnel.py
+
+[Unit]
+Description=Cloudflare Tunnel (stellar-soc API token)
+After=network-online.target stellar-soc-api.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+EnvironmentFile=-/opt/stellar-jira/.env
+ExecStart=/bin/bash -c 'exec /usr/bin/cloudflared tunnel --no-autoupdate run --token "$(tr -d "\n" < CLOUDFLARE_TUNNEL_TOKEN_FILE_PLACEHOLDER)"'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

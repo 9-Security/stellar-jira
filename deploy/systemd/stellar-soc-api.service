@@ -1,0 +1,36 @@
+# Stellar SOC Web API + static UI (serve_api).
+# Serves Demo UI, /v1/auth, /v1/demo, /v1/admin, webhooks.
+#
+# Install:
+#   sudo install -m 644 deploy/systemd/stellar-soc-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now stellar-soc-api.service
+#
+# Listens on 127.0.0.1 only — expose via Cloudflare Tunnel, not GCP firewall.
+
+[Unit]
+Description=Stellar SOC platform HTTP API and Web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/stellar-jira
+
+EnvironmentFile=-/etc/xmdr/.env
+EnvironmentFile=-/opt/stellar-jira/.env
+Environment=PYTHONPATH=/opt/stellar-jira
+Environment=HOST=127.0.0.1
+Environment=PORT=8000
+
+ExecStart=/opt/stellar-jira/serve_api
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=append:/var/log/stellar_soc_api.log
+StandardError=append:/var/log/stellar_soc_api.log
+SyslogIdentifier=stellar-soc-api
+
+[Install]
+WantedBy=multi-user.target

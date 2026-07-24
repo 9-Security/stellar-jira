@@ -1,0 +1,15 @@
+{
+  "default_criticality": "medium",
+  "hosts": {
+    "dc01": { "criticality": "critical", "role": "domain-controller" },
+    "dc02": { "criticality": "critical", "role": "domain-controller" },
+    "fileserver": { "criticality": "high", "role": "file-server" },
+    "erp-prod": { "criticality": "critical", "role": "erp" },
+    "localhost": { "criticality": "low", "role": "workstation" },
+    "ngb-yulihu": {
+      "criticality": "medium",
+      "role": "workstation",
+      "notes": "Seeded from AIXSOC-52 / ticket 1220 lab endpoint"
+    }
+  }
+}

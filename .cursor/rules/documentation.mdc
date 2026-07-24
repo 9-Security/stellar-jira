@@ -1,0 +1,33 @@
+---
+description: Docs source of truth — tiered reading; never load archive or PRD by default
+alwaysApply: true
+---
+
+# Documentation source of truth
+
+**Routing table:** [`docs/README.md`](docs/README.md) and [`AGENTS.md`](AGENTS.md).
+
+## Tier 1 (read first)
+
+- `docs/CURRENT_RUNTIME.md` — Stellar↔Jira sync
+- `docs/MAINTENANCE.md` — ops
+- `config/stellar_tenants.json` — tenant ops
+- `.env` / `env.example` — runtime config
+
+## Tier 2 (task-specific only)
+
+- `docs/DEMO_MVP_v0.1.md` — xMDR Web / platform / demo API
+- `docs/CLOUDFLARE_TUNNEL.md` — tunnel / public URL
+- `docs/DECISION_LAYER.md` — Decision Layer
+
+## Do not read by default (Tier 3)
+
+- `docs/PRD_v0.1.md` — future spec, mostly unimplemented
+- `docs/ACTUAL_ARCHITECTURE_FOR_SPEC.md` — ChatGPT handoff duplicate
+- `docs/Security_Decision_Platform_MVP_Spec_v1.0.md` — long spec; prefer CURRENT_RUNTIME
+- `README.md` — human onboarding
+- **`docs/archive/**`** — OUTDATED
+
+Skip any file whose header says `DO NOT READ`, `OUTDATED`, or `DO NOT USE FOR RUNTIME`.
+
+**Conflict order:** `.env` + `CURRENT_RUNTIME.md` + code ≫ `MAINTENANCE.md` ≫ others.

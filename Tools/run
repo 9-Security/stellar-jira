@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+# Stellar ↔ Jira only (used in stellar-only GitHub export as Tools/run).
+set -euo pipefail
+TOOLS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$TOOLS/.." && pwd)"
+cd "$ROOT"
+export PYTHONPATH="$ROOT"
+VENV_PY="$ROOT/.venv/bin/python3"
+
+_ensure_venv() {
+  if [[ ! -x "$VENV_PY" ]]; then
+    echo "[Tools/run] Missing $ROOT/.venv — run: bash Tools/setup_env.sh" >&2
+    exit 1
+  fi
+}
+
+_usage() {
+  cat <<'EOF'
+Tools/run — Stellar Cyber → Jira AIxSOC
+
+  stellar-verify        Stellar API + Jira 連線
+  stellar-case          查一筆 Stellar Case
+  stellar-detail        Case 完整 bundle
+  stellar-jira-dry-run  建票預覽（--create 才建票）
+  stellar-sync-dry-run  輪詢一輪，不建票
+  stellar-poll          輪詢一輪並建 Jira
+  stellar-automation    常駐輪詢
+  stellar-writeback     Jira→Stellar 回寫
+  notify-test           測試 SOC 通知（Email + LINE，依 .env 開關）
+  line-list-followers   列出 Bot 好友 User ID（付費 API；免費常 403）
+  line-verify           驗證 LINE_NOTIFY_TO（加 --push 測試推播）
+  notify-case           對已開票的 Stellar case 重寄 SOC 通知（--case-id）
+  report-export         多租戶事件報表 CSV/JSON（--tenant --product --month 或日期區間）
+  report-monthly        多租戶月報 Word（--tenant --product --month 或日期區間）
+  stellar-darktrace-report   同 report-export（別名）
+  stellar-darktrace-monthly  同 report-monthly（別名）
+  stellar-cases-repro    Stellar Cases LIST 診斷（可寄原廠；讀 .env）
+  decision-evaluate      Decision Layer 預覽（--case-id；可加 --persist / --ai）
+  decision-outcome       寫入決策 outcome（TP/FP / root cause）
+  decision-dataset       匯出 Decision Dataset JSONL
+  decision-pilot-report  Pilot 決策稽核 / ROI 報告（md|json）
+  decision-outcome-backfill  從 Jira resolution tag 回填 TP/FP（預設 dry-run；加 --apply）
+  case-archive-gc        清理非 milestone 的 case snapshot（預設 dry-run；加 --apply 才刪）
+  stellar-case-export    匯出 case+全量 alerts JSON（給地端 AI；--ticket / --case-id --out）
+  tenant-list            列出 tenant registry、同步統計與 quarantine
+  tenant-discover        從 Stellar 探索 tenants（加 --apply 寫入為 disabled）
+  tenant-validate        驗證 registry 與 Stellar GET /tenants
+  tenant-enable          啟用 tenant（tenant-enable <source_id>）
+  tenant-disable         停用 tenant（tenant-disable <source_id>）
+  tenant-health          同 tenant-list（營運健康狀態）
+  tenant-quarantine      列出 unknown / mismatch / disabled cases
+  tenant-backfill        舊 Jira link 補 tenant metadata（加 --apply）
+  platform-user          Platform 使用者管理（create / list）
+  web-build              建置 Web UI（web/dist，需 Node.js）
+  cloudflare-tunnel-setup  Cloudflare Tunnel（--preflight 預裝；填 Token 後執行）
+  maiagent-trial         旁路試跑 MaiAgent（不寄信／不改 Groq；需 MAIAGENT_API_KEY + CHATBOT_ID）
+  maiagent-notify        個人雙線推播 MaiAgent 因果分析（只送 MAIAGENT_NOTIFY_*；不動 SOC_NOTIFY_TO）
+  compile-check         語法檢查 app/ scripts/（不寫 __pycache__）
+  serve                   啟動 webhook API（./serve_api）
+EOF
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  ""|-h|--help|help) _usage ;;
+  compile-check)
+    _ensure_venv
+    ROOT="$ROOT" "$VENV_PY" -c '
+import ast, os, pathlib, sys
+root = pathlib.Path(os.environ["ROOT"])
+errors: list[str] = []
+for sub in ("app", "scripts"):
+    base = root / sub
+    if not base.is_dir():
+        continue
+    for path in sorted(base.rglob("*.py")):
+        try:
+            ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        except SyntaxError as exc:
+            errors.append(f"*** {exc.filename}, line {exc.lineno}: {exc.msg}")
+if errors:
+    print("\n".join(errors), file=sys.stderr)
+    sys.exit(1)
+'
+    echo "[Tools/run] compile-check OK"
+    ;;
+  stellar-case)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/query_stellar_case.py" "$@"
+    ;;
+  stellar-verify)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/verify_stellar_integration.py" "$@"
+    ;;
+  stellar-detail)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/query_stellar_case_detail.py" "$@"
+    ;;
+  stellar-jira-dry-run)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_to_jira.py" "$@"
+    ;;
+  stellar-sync-dry-run)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/poll_stellar_to_jira.py" --dry-run "$@"
+    ;;
+  stellar-poll)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/poll_stellar_to_jira.py" "$@"
+    ;;
+  stellar-automation)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_jira_automation.py" "$@"
+    ;;
+  stellar-writeback)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/jira_stellar_writeback.py" "$@"
+    ;;
+  notify-test)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/verify_soc_notify.py" "$@"
+    ;;
+  line-list-followers)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/line_list_followers.py" "$@"
+    ;;
+  line-verify)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/line_verify_recipient.py" "$@"
+    ;;
+  notify-case)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/notify_stellar_case.py" "$@"
+    ;;
+  report-export|stellar-darktrace-report)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/generate_stellar_darktrace_report.py" "$@"
+    ;;
+  report-monthly|stellar-darktrace-monthly)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/generate_stellar_darktrace_monthly_report.py" "$@"
+    ;;
+  stellar-cases-repro)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_cases_list_repro.py" "$@"
+    ;;
+  decision-evaluate)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/decision_evaluate.py" "$@"
+    ;;
+  decision-outcome)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/decision_outcome.py" "$@"
+    ;;
+  decision-dataset)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/decision_dataset_export.py" "$@"
+    ;;
+  decision-pilot-report)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/decision_pilot_report.py" "$@"
+    ;;
+  decision-outcome-backfill)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/decision_outcome_backfill.py" "$@"
+    ;;
+  case-archive-gc)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/case_archive_gc.py" "$@"
+    ;;
+  stellar-case-export)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_case_export.py" "$@"
+    ;;
+  tenant-list)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" list "$@"
+    ;;
+  tenant-discover)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" discover "$@"
+    ;;
+  tenant-validate)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" validate "$@"
+    ;;
+  tenant-enable)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" enable "$@"
+    ;;
+  tenant-disable)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" disable "$@"
+    ;;
+  tenant-health)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" health "$@"
+    ;;
+  tenant-quarantine)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" quarantine "$@"
+    ;;
+  tenant-backfill)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/stellar_tenant_admin.py" backfill "$@"
+    ;;
+  platform-user)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/platform_user_admin.py" "$@"
+    ;;
+  web-build)
+    NODE_BIN="$ROOT/.tools/node-v22.14.0-linux-x64/bin"
+    if [[ -x "$NODE_BIN/npm" ]]; then
+      export PATH="$NODE_BIN:$PATH"
+    elif ! command -v npm >/dev/null 2>&1; then
+      echo "[Tools/run] npm not found. Install Node or run:" >&2
+      echo "  curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz | tar -xJ -C $ROOT/.tools --strip-components=1" >&2
+      exit 1
+    fi
+    cd "$ROOT/web"
+    npm install
+    npm run build
+    echo "[Tools/run] web-build OK → web/dist"
+    ;;
+  cloudflare-tunnel-setup)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/setup_cloudflare_tunnel.py" "$@"
+    ;;
+  maiagent-trial)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/maiagent_case_trial.py" "$@"
+    ;;
+  maiagent-notify)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/maiagent_notify.py" "$@"
+    ;;
+  serve)
+    exec "$ROOT/serve_api" "$@"
+    ;;
+  *)
+    echo "Unknown command: ${cmd:-}" >&2
+    _usage >&2
+    exit 1
+    ;;
+esac

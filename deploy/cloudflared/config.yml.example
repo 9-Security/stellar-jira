@@ -1,0 +1,22 @@
+# Cloudflare Tunnel → local serve_api (Stellar SOC Web)
+# Copy: sudo cp deploy/cloudflared/config.yml.example /etc/cloudflared/config.yml
+#
+# Before use:
+#   1. cloudflared tunnel login
+#   2. cloudflared tunnel create stellar-soc
+#   3. Replace TUNNEL-UUID and hostname below
+#   4. cloudflared tunnel route dns stellar-soc soc.yourdomain.com
+
+tunnel: stellar-soc
+credentials-file: /home/REPLACE_USER/.cloudflared/REPLACE-TUNNEL-UUID.json
+
+ingress:
+  # Stellar SOC: Web UI + /v1/* API (single uvicorn process)
+  - hostname: soc.yourdomain.com
+    service: http://127.0.0.1:8000
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Required catch-all
+  - service: http_status:404

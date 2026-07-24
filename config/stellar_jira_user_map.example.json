@@ -1,0 +1,13 @@
+{
+  "_comment": "Map Stellar assignee email ↔ Jira accountId when Atlassian hides emailAddress in API.",
+  "email_to_account_id": {
+    "arron.liao@jjnet.com.tw": "6305ceb37cedcad7664d8a9a",
+    "shar.tseng@jjnet.com.tw": "712020:fe638041-7c33-46f9-8141-cd5d9583b80f",
+    "brady.wu@jjnet.com.tw": "712020:7c2aa047-5cd5-41ae-94b2-648598da38aa"
+  },
+  "account_id_to_email": {
+    "6305ceb37cedcad7664d8a9a": "arron.liao@jjnet.com.tw",
+    "712020:fe638041-7c33-46f9-8141-cd5d9583b80f": "shar.tseng@jjnet.com.tw",
+    "712020:7c2aa047-5cd5-41ae-94b2-648598da38aa": "brady.wu@jjnet.com.tw"
+  }
+}

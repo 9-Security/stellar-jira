@@ -1,0 +1,343 @@
+> **AI AGENTS — Tier 2.** Read when task touches **xMDR Web** (`web/`, `app/platform/`, `app/demo/`, Tunnel).  
+> Stellar↔Jira automation: use `CURRENT_RUNTIME.md` — not this file.
+
+# Demo MVP v0.1 — 老闆預覽版（xMDR）
+
+- **文件版本：** v0.3  
+- **文件狀態：** **已上線（老闆 Demo 可用）**  
+- **文件日期：** 2026-07-24  
+- **對外網址：** https://xmdr.nine-security.com  
+- **完整規格：** [`PRD_v0.1.md`](PRD_v0.1.md)（仍有效，但 **本階段不實作** 其中大部分）
+
+---
+
+## 0. 目前狀態摘要（2026-07-24）
+
+| 項目 | 狀態 |
+|------|------|
+| Web UI + API | ✅ 已部署（`stellar-soc-api.service` + `web/dist`） |
+| Cloudflare Tunnel | ✅ `xmdr.nine-security.com` → `127.0.0.1:8000`（見 [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md)） |
+| 登入 / per-user 2FA | ✅ |
+| 儀表板（真實資料 + Stellar 即時） | ✅ P1/P2 已完成（見 §4.2） |
+| 案件中心（唯讀） | ✅ XSOC 案件編號顯示 |
+| 帳號管理 | ✅ `platform_admin` |
+| 資安強化（工程面） | ✅ Cookie session、rate limit、關閉 `/docs` 等（§5.7） |
+| Cloudflare Access | ⏸ 未實作（可手動於 Cloudflare 後台加） |
+| Alerts 儀表板（P3/P4） | ⏸ 延後 |
+| Users/Assets 趨勢（P5） | ⏸ 不做 |
+
+**常駐服務（GCP VM）：**
+
+```text
+stellar-soc-api.service      # FastAPI + SPA（127.0.0.1:8000）
+cloudflared-stellar-soc.service   # Tunnel → xmdr.nine-security.com
+ticket-api-stellar-jira.service   # Stellar↔Jira 自動化（不變）
+```
+
+**變更後需執行：** `./Tools/run web-build`（若改前端）→ `sudo systemctl restart stellar-soc-api.service`
+
+---
+
+## 1. 目標（這一階段只做什麼）
+
+給老闆看 **可登入的 Web 基本版**，包含：
+
+| # | 畫面 | 說明 |
+|---|------|------|
+| 1 | **登入** | Email + 密碼；依帳號 **個別** 決定是否要走 2FA（見 §3.4） |
+| 2 | **數據儀表板** | **Stellar 即時 Cases API**（預設）+ sync DB fallback；時間窗可切 |
+| 3 | **案件管理中心** | **真實案件**列表 + 詳情；編號以 **XSOC-*** 為主 |
+| 4 | **設定中心 → 帳號管理** | 新增 / 停用帳號；管理各帳號是否啟用 2FA |
+
+**刻意不做（延後）：**
+
+- Platform Ticket 取代 Jira 建票  
+- 客戶 Portal（客戶自己登入看案）  
+- 通知收件人、tenant 業務設定、改 `.env`  
+- Quarantine 工作台、tenant registry UI、報表下載  
+- 案件在 UI 內辦案 / 結案（仍唯讀）  
+
+---
+
+## 2. 已確認決策（2026-07-24）
+
+| # | 決策 |
+|---|------|
+| 1 | **老闆帳號 Demo 可不綁 2FA**；但系統要有 **設定中心 → 帳號管理**，可替各帳號開關 2FA |
+| 2 | 儀表板 **以 Stellar 即時 Cases 為主**（`source=auto`），API 失敗時 fallback **sync DB** |
+| 3 | 案件管理 **sync DB 已建票案件**為完整詳情；Stellar 即時未建票者顯示「未建票」 |
+| 4 | 案件編號 UI 顯示 **middleware `XSOC-{客戶}-{YYMMDD}-{seq}`**，非 Stellar `_id` |
+| 5 | Jira 建票 automation **維持不變**；xMDR 為唯讀展示層 |
+
+---
+
+## 3. 與現有系統的關係
+
+```text
+現有 automation（不動）
+  Stellar poll → Jira 建票 → notify
+        ↓
+  stellar_sync_state.sqlite + case_archive
+  decision_events.middleware_case_id  ← XSOC 案件編號
+        ↓（唯讀）
+  Demo API + Web UI（xMDR）  ← 老闆看這裡
+        ↑
+  Stellar Cases API（儀表板即時指標，可選）
+
+platform.db（users）  ← 登入 + 帳號管理
+```
+
+| 項目 | Demo 階段 |
+|------|-----------|
+| Jira 建票 | **維持現狀**，不修改 `runner.py` |
+| `.env` | **維持現狀**，機密不進 UI |
+| P0 Auth | **已實作**，擴充 per-user 2FA 政策 + 管理 API |
+| 案件資料 | `incident_jira` + `CaseSnapshotStore`（與 `/v1/ai-data` 同源） |
+
+---
+
+## 4. 畫面規格
+
+### 4.1 登入頁
+
+- Email / 密碼  
+- 若該帳號 `totp_policy=required` 且已綁定 → 第二步 TOTP  
+- 若 `totp_policy=off` 或 `optional` 且未綁定 → 密碼即可進（老闆帳號預設 `off`）  
+
+### 4.2 數據儀表板
+
+**資料來源（已實作）：**
+
+| 模式 | 說明 | UI 標示 |
+|------|------|---------|
+| `source=auto`（預設） | 先打 **Stellar Cases API**，失敗則讀 sync DB | 「Stellar 即時」或「AI SOC 同步」 |
+| `source=live` | 強制 Stellar API | 「Stellar 即時」 |
+| `source=sync` | 僅 sync DB（已連 Jira 子集） | 「AI SOC 同步」 |
+
+**時間與指標（P1 + P2，已完成）：**
+
+| 控制項 | 選項 | 說明 |
+|--------|------|------|
+| 時間範圍 `window` | `12h` / `24h` / `7d` / `all` | 預設 `12h`，對齊 Stellar UI 觀感 |
+| 新案基準 `new_basis` | `created` / `modified` | 摘要卡「區間內新案」 |
+| 範圍 `scope` | `modified` / `created` | API 篩選用（前端預設 modified） |
+
+**畫面區塊：**
+
+| 區塊 | 內容 |
+|------|------|
+| 摘要卡 | 總案件數、開放中、Critical/High 開放、**區間內新案**（`new_in_window`） |
+| 嚴重度分布 | 即時或 sync 聚合 |
+| 狀態分布 | 即時或 sync 聚合 |
+| ~~Tenant 分布~~ | **已移除**（2026-07-24） |
+| 最近案件（最多 50 筆） | **客戶端篩選**：搜尋、建票狀態（已建票/未建票）、嚴重度、狀態 |
+
+**案件編號顯示規則：**
+
+| 情況 | 顯示 |
+|------|------|
+| 已建票 | `XSOC-JJNET-260724-001`（來自 `decision_events.middleware_case_id`） |
+| 舊案無 XSOC | Jira key（例 `AIXSOC-63`） |
+| Stellar 即時、尚未建票 | **未建票**（不顯示長串 `_id`） |
+
+**API 回應欄位（摘要）：** `summary.new_in_window`、`meta.source` / `meta.window` / `meta.new_basis`；每筆案件含 `case_number`、`case_ref`。
+
+### 4.3 案件管理中心
+
+**列表欄位：** **XSOC 案件編號**（或 Jira key）、標題、tenant、嚴重度、狀態、更新時間。  
+**篩選：** 關鍵字、嚴重度（日期 / tenant 篩選仍可用 API 擴充，UI 尚未全做）。
+
+**詳情：**
+
+| 區塊 | 內容 |
+|------|------|
+| 基本資訊 | **案件編號**（XSOC）、標題、嚴重度、狀態、偵測時間、tenant |
+| 受影響主機/IP | `observables.observables.host[]` |
+| 事件摘要 | `stellar_case_detail_lines` 精簡版 |
+
+**路由：** `/cases/{id}` 支援 `XSOC-*`、`jira_key`、`stellar_case_id`。
+
+### 4.4 設定中心 → 帳號管理
+
+**導覽：** 側欄「設定中心」展開子項「帳號管理」。  
+**權限：** 僅 `platform_admin`（Demo 老闆帳號用此角色）。
+
+| 功能 | 說明 |
+|------|------|
+| 列表 | Email、角色、tenant、2FA 狀態、啟用狀態 |
+| 新增帳號 | Email、初始密碼、角色、tenant（若為 tenant 角色） |
+| 停用帳號 | 軟刪除 `is_active=false`（不硬刪，保留 audit） |
+| **2FA 管理** | 每帳號 `totp_policy`：`off` / `optional` / `required` |
+| 重設 2FA | 清除已綁 TOTP secret，強制下次依政策重綁 |
+| 我的帳號（可同頁或子頁） | 改自己的密碼；若政策允許可自助綁定 2FA |
+
+**老闆帳號預設：** `totp_policy=off`（登入不用 Authenticator）。  
+**其他帳號：** 管理員可在 UI 設為 `required`。
+
+---
+
+## 5. 技術方案
+
+### 5.1 導覽結構（Web）
+
+```text
+登入
+└─ Layout
+     ├─ 數據儀表板
+     ├─ 案件管理中心
+     │    └─ 案件詳情
+     └─ 設定中心
+          └─ 帳號管理
+```
+
+### 5.2 後端 API
+
+**案件與儀表板（唯讀，真實資料）**
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `/v1/demo/overview` | 儀表板聚合；query：`window`、`scope`、`new_basis`、`source` |
+| GET | `/v1/demo/cases` | 分頁列表（sync DB）；`severity`、`status`、`q` |
+| GET | `/v1/demo/cases/{id}` | 詳情；`XSOC-*` / `jira_key` / `stellar_case_id` |
+
+**帳號管理（`platform_admin`）**
+
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `/v1/admin/users` | 列表 |
+| POST | `/v1/admin/users` | 新增 |
+| PATCH | `/v1/admin/users/{id}` | 停用、改角色、`totp_policy` |
+| POST | `/v1/admin/users/{id}/totp-reset` | 清除 TOTP 綁定 |
+
+**既有 Auth（調整登入邏輯）**
+
+| Path | 變更 |
+|------|------|
+| `/v1/auth/login` | 依使用者 `totp_policy` 決定是否要求 TOTP |
+| `/v1/auth/totp/*` | 自助綁定（政策非 `off` 時） |
+
+### 5.3 資料模型擴充（`platform.db`）
+
+`users` 表新增：
+
+| 欄位 | 類型 | 說明 |
+|------|------|------|
+| `totp_policy` | TEXT | `off` \| `optional` \| `required`（預設 `optional`） |
+
+登入規則：
+
+| totp_policy | totp_enabled | 行為 |
+|-------------|--------------|------|
+| `off` | — | 僅密碼 |
+| `optional` | false | 僅密碼 |
+| `optional` | true | 密碼 + TOTP |
+| `required` | false | 密碼登入後僅能進 TOTP 設定，完成前限制其他 API |
+| `required` | true | 密碼 + TOTP |
+
+### 5.4 設定儲存原則（不變）
+
+| 類型 | 存放 | Demo UI |
+|------|------|---------|
+| API 金鑰、SMTP/Resend | `.env` | ❌ |
+| 平台使用者 / 2FA 政策 | `platform.db` | ✅ 帳號管理 |
+| 案件與儀表板 | sync SQLite + archive | 唯讀 |
+
+### 5.5 前端
+
+- React + Vite + TypeScript；品牌 **xMDR · SOC 戰情中心**（`web/public/logo.png`）  
+- `web/dist` 由 FastAPI `SPAStaticFiles` 提供（`/login` 等深連結可刷新）  
+- Session：**HttpOnly cookie** `soc_session`（非 localStorage JWT）  
+- 單一 SPA，`platform_admin` 才顯示「設定中心」  
+
+### 5.6 部署
+
+```text
+stellar-soc-api.service    # 127.0.0.1:8000（API + web/dist）
+cloudflared-stellar-soc    # → https://xmdr.nine-security.com
+ticket-api-stellar-jira    # Stellar 輪詢 / Jira（獨立，不變）
+```
+
+詳見 [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md)。
+
+### 5.7 資安（工程面，已實作）
+
+| 項目 | 說明 |
+|------|------|
+| Session | HttpOnly cookie；`PLATFORM_EXPOSE_BEARER_TOKEN=false` |
+| 登入 rate limit | 失敗次數限制（IP + email） |
+| API 文件 | `/docs`、`/openapi.json` 關閉 |
+| `AI_DATA_API_TOKEN` | 一律要求（無 localhost bypass） |
+| Security headers | `app/middleware/security_headers.py` |
+| TOTP 設定 | 不再於 JSON 回傳 raw `secret` |
+| 最後 admin | 不可停用 / 降權 |
+
+**未做：** Cloudflare Access / Zero Trust 政策（需 Cloudflare 後台手動）。
+
+---
+
+## 6. 實作進度
+
+| 步驟 | 交付 | 狀態 |
+|------|------|------|
+| **D1** | `extract_affected_hosts`；`/v1/demo/overview` + `/cases`；測試 | ✅ |
+| **D2** | `totp_policy` migration；`/v1/admin/users` CRUD；登入邏輯 | ✅ |
+| **D3** | 前端：登入 + Layout + 路由 | ✅ |
+| **D4** | 前端：儀表板（真實數字） | ✅ |
+| **D5** | 前端：案件列表 + 詳情 | ✅ |
+| **D6** | 前端：設定中心 → 帳號管理 | ✅ |
+| **D7** | 老闆帳號、Cloudflare Tunnel、現場驗收 | ✅ |
+| **D8** | 儀表板 P1/P2：時間窗 + Stellar 即時 + `new_in_window` | ✅ |
+| **D9** | XSOC 案件編號、最近案件篩選、移除 Tenant 分布 | ✅ |
+
+**就緒標準（已達成）：** 老闆登入 https://xmdr.nine-security.com → 儀表板對齊 Stellar Cases 時間窗 → 最近案件可篩「已建票」→ 點 XSOC 編號看詳情 → 帳號管理可開關 2FA。
+
+### 6.1 後續待辦（非本階段）
+
+| 優先 | 項目 | 說明 |
+|------|------|------|
+| P3 | Alerts 摘要（snapshot） | 儀表板 Alerts 指標 |
+| P4 | Alerts 全量掃描 | 對齊 Stellar Alerts 視圖 |
+| P5 | Users / Assets 趨勢 | **明確不做** |
+| — | Cloudflare Access | 手動或另開工單 |
+| — | 案件中心 server 端日期/tenant 篩選 | UI 可再補 |
+
+---
+
+## 7. PRD 對照
+
+| 項目 | Demo v0.3 | 完整 PRD |
+|------|-----------|----------|
+| 登入 + 2FA | ✅ per-user 政策 | 全域強制 → 之後對齊 |
+| 儀表板 | ✅ Stellar 即時 + sync fallback、時間窗 | Client Overview 延後 |
+| 案件 | ✅ 真實、唯讀、XSOC 編號 | 辦案/結案延後 |
+| 設定 | ✅ **僅帳號管理** | 通知收件人等延後 |
+| Jira | 不動 | Platform Ticket 延後 |
+| Alerts 儀表板 | ⏸ P3/P4 | PRD 有規劃 |
+
+---
+
+## 8. 給老闆的說詞
+
+「這是 **xMDR SOC 戰情中心**，接在現有 Stellar 同步與 Jira 流程上：儀表板可看 **即時 Cases** 與我們定義的 **XSOC 案件編號**；後台建票 automation 不變。已具備帳號與 2FA 管理，方便之後給團隊擴充。」
+
+---
+
+## 9. 關鍵程式路徑（維護用）
+
+| 區域 | 路徑 |
+|------|------|
+| Demo API | `app/routers/demo.py` |
+| 儀表板 sync | `app/demo/case_service.py` |
+| 儀表板 live | `app/demo/live_overview.py`、`app/demo/overview_query.py` |
+| XSOC 編號 | `app/demo/case_number.py`、`app/sync/case_id.py` |
+| 平台 Auth | `app/platform/`、`app/routers/platform_auth.py` |
+| 前端 | `web/src/pages/`、`web/src/caseDisplay.ts` |
+| SPA 靜態 | `app/spa_static.py` |
+
+## 10. 修訂紀錄
+
+| 版本 | 日期 | 說明 |
+|------|------|------|
+| v0.1 | 2026-07-24 | 老闆 Demo：登入 + 儀表板 + 案件中心 |
+| v0.2 | 2026-07-24 | 加設定中心帳號管理；確認真實 sync 資料；per-user 2FA |
+| v0.3 | 2026-07-24 | **上線狀態**：xmdr.nine-security.com；P1/P2 儀表板；XSOC 編號；最近案件篩選；資安強化；更新進度表 |

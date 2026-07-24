@@ -1,0 +1,28 @@
+[
+  {
+    "source_id": "jjnet",
+    "enabled": true,
+    "sync_enabled": true,
+    "reporting_enabled": true,
+    "customer_code": "JJNET",
+    "tenant_name": "JJNET",
+    "tenant_id": "${STELLAR_TENANT_ID}",
+    "products": ["darktrace", "cortex"],
+    "jira_project_key": "AIXSOC",
+    "report_title": "JJNET",
+    "allowed_severities": ["Critical", "High"]
+  },
+  {
+    "source_id": "jjnet-edr",
+    "enabled": true,
+    "sync_enabled": true,
+    "reporting_enabled": true,
+    "customer_code": "JJEDR",
+    "tenant_name": "JJNET-EDR",
+    "tenant_id": "replace-with-stellar-cust-id",
+    "products": ["cortex"],
+    "jira_project_key": "AIXSOC",
+    "report_title": "JJNET-EDR",
+    "allowed_severities": ["Critical", "High"]
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "_comment": "Stellar Cyber ↔ Jira AIxSOC. Inbound + Jira→Stellar write-back use severity/status. Assignee uses Jira built-in assignee (email).",
+  "severity": "customfield_10057",
+  "status": "customfield_10061",
+  "name": "customfield_10122",
+  "case_id": "customfield_10060",
+  "resolution_tag": "customfield_10201",
+  "_resolution_tag_options": ["None", "False Positive", "Benign", "True Positive"],
+  "_resolution_tag_stellar": "See config/stellar_resolution_tag_map.json (tags.add e.g. resolution:true-positive)",
+  "_note_create_screen": "Add customfield_10201 to AIxSOC create screen or create_issue may ignore it"
+}

@@ -1,0 +1,44 @@
+# Stellar Cyber → Jira AIxSOC polling daemon.
+# Each cycle: global poll → tenant classify → Jira/mirror/writeback → optional
+# Groq SOC Email/LINE + independent MaiAgent personal notification.
+#
+# Install (adjust WorkingDirectory / paths to your clone):
+#   sudo install -m 644 deploy/systemd/ticket-api-stellar-jira.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ticket-api-stellar-jira.service
+
+[Unit]
+Description=stellar-jira Stellar Cyber to Jira sync (polling daemon)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/stellar-jira
+
+EnvironmentFile=-/etc/xmdr/.env
+EnvironmentFile=-/opt/stellar-jira/.env
+Environment=PYTHONPATH=/opt/stellar-jira
+
+ExecStart=/opt/stellar-jira/Tools/run stellar-automation
+
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2
+StartLimitIntervalSec=300
+StartLimitBurst=15
+
+TimeoutStopSec=120
+KillSignal=SIGTERM
+KillMode=mixed
+
+Nice=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=append:/var/log/stellar_jira.log
+StandardError=append:/var/log/stellar_jira.log
+SyslogIdentifier=stellar-jira
+
+[Install]
+WantedBy=multi-user.target

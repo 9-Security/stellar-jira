@@ -1,0 +1,22 @@
+# Cloudflare Tunnel for stellar-soc (points to stellar-soc-api on :8000).
+#
+# Prereq: /etc/cloudflared/config.yml (see deploy/cloudflared/config.yml.example)
+#
+# Install:
+#   sudo install -m 644 deploy/systemd/cloudflared-stellar-soc.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cloudflared-stellar-soc.service
+
+[Unit]
+Description=Cloudflare Tunnel (stellar-soc → local serve_api)
+After=network-online.target stellar-soc-api.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/cloudflared --config /etc/cloudflared/config.yml tunnel run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

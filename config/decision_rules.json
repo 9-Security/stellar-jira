@@ -1,0 +1,120 @@
+{
+  "version": "1.1",
+  "defaults": {
+    "action": "create_ticket",
+    "escalation": "L1",
+    "notify_customer": false,
+    "notify_internal": true,
+    "isolate_host": false,
+    "playbook_id": "PB-DEFAULT",
+    "confidence": 0.4,
+    "summary": "Default L1 create"
+  },
+  "rules": [
+    {
+      "id": "sev_low_defer",
+      "priority": 10,
+      "when": { "severity_in": ["Low"] },
+      "then": {
+        "action": "defer",
+        "escalation": "L1",
+        "notify_internal": false,
+        "notify_customer": false,
+        "playbook_id": "PB-DEFER-LOW",
+        "confidence": 0.85,
+        "summary": "Low severity — defer ticket create until severity rises"
+      }
+    },
+    {
+      "id": "sev_medium_l1",
+      "priority": 20,
+      "when": { "severity_in": ["Medium"] },
+      "then": {
+        "action": "create_ticket",
+        "escalation": "L1",
+        "notify_customer": false,
+        "playbook_id": "PB-L1-MED",
+        "confidence": 0.7,
+        "jira_priority": "Medium",
+        "jira_labels": ["decision-l1"],
+        "summary": "Medium severity — L1 investigate first"
+      }
+    },
+    {
+      "id": "malware_blocked_ir_review",
+      "priority": 110,
+      "when": {
+        "severity_in": ["Critical", "High"],
+        "disposition": "已阻擋",
+        "alert_category_any": ["malware"]
+      },
+      "then": {
+        "action": "escalate",
+        "escalation": "IR",
+        "notify_customer": true,
+        "notify_internal": true,
+        "isolate_host": false,
+        "playbook_id": "PB-IR-MALWARE-BLOCKED",
+        "confidence": 0.92,
+        "jira_priority": "Highest",
+        "jira_labels": ["decision-ir", "malware", "decision-blocked-review"],
+        "summary": "Malware/WildFire already blocked — IR review; do not re-isolate (case-1220 style)"
+      }
+    },
+    {
+      "id": "malware_critical_ir",
+      "priority": 100,
+      "match": "any_extra",
+      "when": {
+        "severity_in": ["Critical", "High"],
+        "alert_category_any": ["malware"],
+        "name_contains_any": ["wildfire", "malware"]
+      },
+      "then": {
+        "action": "escalate",
+        "escalation": "IR",
+        "notify_customer": true,
+        "notify_internal": true,
+        "isolate_host": true,
+        "playbook_id": "PB-IR-MALWARE",
+        "confidence": 0.9,
+        "jira_priority": "Highest",
+        "jira_labels": ["decision-ir", "malware"],
+        "summary": "Malware/WildFire signals — escalate to IR (isolation advisory only)"
+      }
+    },
+    {
+      "id": "already_blocked_review",
+      "priority": 80,
+      "when": {
+        "severity_in": ["Critical", "High", "Medium"],
+        "disposition": "已阻擋"
+      },
+      "then": {
+        "action": "create_ticket",
+        "escalation": "L2",
+        "notify_customer": true,
+        "isolate_host": false,
+        "playbook_id": "PB-L2-BLOCKED",
+        "confidence": 0.8,
+        "jira_labels": ["decision-blocked-review"],
+        "summary": "Platform already blocked — review efficacy, do not re-isolate"
+      }
+    },
+    {
+      "id": "critical_high_l2",
+      "priority": 50,
+      "when": { "severity_in": ["Critical", "High"] },
+      "then": {
+        "action": "create_ticket",
+        "escalation": "L2",
+        "notify_customer": true,
+        "playbook_id": "PB-L2-HIGH",
+        "confidence": 0.75,
+        "jira_priority": "High",
+        "jira_labels": ["decision-l2"],
+        "summary": "High/Critical — L2 triage + customer notify"
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "_comment": "Jira customfield resolution tag (option) ↔ Stellar case tags (tags.add / tags on case).",
+  "jira_field": "customfield_10201",
+  "jira_option_by_value": true,
+  "pairs": [
+    { "jira": "None", "stellar_tag": "resolution:none" },
+    { "jira": "False Positive", "stellar_tag": "resolution:false-positive" },
+    { "jira": "Benign", "stellar_tag": "resolution:benign" },
+    { "jira": "True Positive", "stellar_tag": "resolution:true-positive" }
+  ],
+  "on_resolve_also_set_stellar_status": "Resolved"
+}

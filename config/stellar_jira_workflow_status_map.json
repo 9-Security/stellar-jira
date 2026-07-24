@@ -1,0 +1,18 @@
+{
+  "_comment": "Status sync uses Jira Workflow + 事件狀態 (customfield_10061) ↔ Stellar case.status. Assignee sync uses Jira Assignee email ↔ Stellar assignee_name.",
+  "jira_workflow_to_stellar": {
+    "Open": "New",
+    "In Progress": "In Progress",
+    "Escalated": "Escalated",
+    "Resolved": "Resolved",
+    "Closed": "Cancelled"
+  },
+  "stellar_to_jira_workflow": {
+    "New": "Open",
+    "In Progress": "In Progress",
+    "Escalated": "Escalated",
+    "Resolved": "Resolved",
+    "Cancelled": "Closed"
+  },
+  "_note_escalated": "Stellar Escalated has no workflow target; only customfield_10061 is updated unless you add a transition in Jira."
+}

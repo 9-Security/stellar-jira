@@ -1,0 +1,97 @@
+{
+  "version": "1.1",
+  "mitre_playbooks": {
+    "malware": "PB-IR-MALWARE",
+    "credential access": "PB-L2-CREDS",
+    "lateral movement": "PB-L2-LATERAL",
+    "persistence": "PB-L1-PERSIST",
+    "execution": "PB-L1-EXEC",
+    "privilege escalation": "PB-L2-PRIV",
+    "defense evasion": "PB-L2-EVASION",
+    "initial access": "PB-L2-ACCESS",
+    "command and control": "PB-L2-C2",
+    "exfiltration": "PB-IR-EXFIL",
+    "impact": "PB-IR-IMPACT",
+    "xdr eba": "PB-L2-HIGH"
+  },
+  "sigma_catalogue": [
+    {
+      "id": "SIGMA-PS-ENCODED",
+      "title": "PowerShell EncodedCommand",
+      "needles": ["powershell", "-enc", "encodedcommand", "frombase64string"],
+      "playbook_id": "PB-PS-003",
+      "escalate_hint": "L2"
+    },
+    {
+      "id": "SIGMA-CRED-DUMP",
+      "title": "Credential Dumping Indicators",
+      "needles": ["lsass", "mimikatz", "procdump", "credential dumping", "sekurlsa"],
+      "playbook_id": "PB-CRED-001",
+      "escalate_hint": "IR"
+    },
+    {
+      "id": "SIGMA-RANSOMWARE",
+      "title": "Ransomware Behaviour",
+      "needles": ["ransomware", "ransom", "vssadmin delete", "shadow copy"],
+      "playbook_id": "PB-RANSOM-001",
+      "escalate_hint": "IR"
+    },
+    {
+      "id": "SIGMA-WILDFIRE-BLOCKED",
+      "title": "WildFire / Malware already blocked by platform",
+      "needles": ["wildfire", "malware", "prevented", "blocked"],
+      "require_blocked": true,
+      "playbook_id": "PB-IR-MALWARE-BLOCKED",
+      "escalate_hint": "IR"
+    },
+    {
+      "id": "SIGMA-WILDFIRE",
+      "title": "WildFire / Malware Sample",
+      "needles": ["wildfire", "malware"],
+      "require_not_blocked": true,
+      "playbook_id": "PB-IR-MALWARE",
+      "escalate_hint": "IR"
+    },
+    {
+      "id": "SIGMA-BIOC-EARLY-BOOT",
+      "title": "Cortex BIOC uncommon process at early boot",
+      "needles": [
+        "seconds from boot",
+        "early startup",
+        "uncommon process with a local/domain user sid",
+        "causality group owner"
+      ],
+      "playbook_id": "PB-L1-PERSIST",
+      "escalate_hint": "L1"
+    },
+    {
+      "id": "SIGMA-SERVICE-CREATE",
+      "title": "Elevation via service creation",
+      "needles": [
+        "created the service",
+        "elevation to system via service",
+        "installutil.exe",
+        "systemcloudservice"
+      ],
+      "playbook_id": "PB-L2-PRIV",
+      "escalate_hint": "L2"
+    },
+    {
+      "id": "SIGMA-SCHEDULED-TASK",
+      "title": "Suspicious scheduled task / schtasks",
+      "needles": ["schtasks", "scheduled task", "schedule\\", "netsves -p -s schedule"],
+      "playbook_id": "PB-L1-PERSIST",
+      "escalate_hint": "L1"
+    }
+  ],
+  "industry_defaults": {
+    "banking": {
+      "notify_customer_min_severity": "High",
+      "default_escalation": "L2"
+    },
+    "default": {
+      "notify_customer_min_severity": "Critical",
+      "default_escalation": "L1"
+    }
+  }
+}

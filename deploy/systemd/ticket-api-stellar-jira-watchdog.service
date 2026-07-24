@@ -1,0 +1,19 @@
+# Watchdog timer for stellar-jira automation (detect down / hung via log mtime).
+#
+# Install (after ticket-api-stellar-jira.service):
+#   sudo install -m 755 scripts/systemd_watchdog_stellar_automation.sh /opt/stellar-jira/scripts/
+#   sudo install -m 644 deploy/systemd/ticket-api-stellar-jira-watchdog.service /etc/systemd/system/
+#   sudo install -m 644 deploy/systemd/ticket-api-stellar-jira-watchdog.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ticket-api-stellar-jira-watchdog.timer
+
+[Unit]
+Description=stellar-jira watchdog (restart automation if down or log stale)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=STELLAR_JIRA_ROOT=/opt/stellar-jira
+Environment=STELLAR_JIRA_AUTOMATION_LOG=/var/log/stellar_jira.log
+Environment=STELLAR_JIRA_AUTOMATION_STALE_SEC=300
+ExecStart=/opt/stellar-jira/scripts/systemd_watchdog_stellar_automation.sh
