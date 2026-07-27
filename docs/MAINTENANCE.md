@@ -6,7 +6,7 @@
 > **Runtime sync behavior:** see [`CURRENT_RUNTIME.md`](CURRENT_RUNTIME.md) first.
 > Archived / historical notes live under [`archive/`](archive/) — do not use for ops.
 
-本 repo 僅含 **Stellar ↔ Jira** 同步，不含 Cortex XDR 線。
+本 repo：**Stellar ↔ Jira** automation、`xMDR` Web（`web/` + `stellar-soc-api`）、可選 CyCraft 整合器；不含 Cortex XDR 線。
 
 ## 設定
 
@@ -93,13 +93,31 @@ sudo systemctl enable --now ticket-api-stellar-jira-watchdog.timer
 | `cloudflared-stellar-soc.service` | Tunnel → https://xmdr.nine-security.com |
 
 ```bash
-./Tools/run web-build                              # 前端變更後
-sudo systemctl restart stellar-soc-api.service
+./Tools/run web-build                              # 前端變更後（需 Node.js；見 Tools/run）
+sudo systemctl restart stellar-soc-api.service     # API + web/dist — 外部整合器等 /v1/settings/*
 sudo systemctl status cloudflared-stellar-soc.service
 curl -s http://127.0.0.1:8000/health
 ```
 
-規格與進度見 [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md)；Tunnel 設定見 [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md)。
+**CyCraft EDR 整合器（選用）：**
+
+```bash
+# 全域：CYCRAFT_CONNECTOR_ENABLED=true、STELLAR_BASE_URL、輪詢間隔等（見 env.example）
+# Per-tenant：xMDR → 設定中心 → 外部整合器（CyCraft 來源 + AIxSOC 匯入 webhook；金鑰存 platform.db 加密）
+# 或 .env 後綴 VAR__TENANT_SUFFIX（例 `XCOCKPIT_API_KEY__JJNET` — suffix 依 registry `source_id`）— 不跨 tenant 共用
+# 營運：CyCraft 目前套用 **jjnet**（JJNET），非 jjnet-edr
+./Tools/run cycraft-test-xcockpit                  # CLI 探測 XCockpit（全域 .env）
+sudo install -m 644 deploy/systemd/cycraft-xcockpit-connector.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cycraft-xcockpit-connector.service   # 若未 install，service 為 not-found
+```
+
+- Poller：`app/integrations/cycraft/multi_poller.py`（每 enabled tenant 獨立設定與 state DB）
+- 變更 automation / CyCraft **Python** 後：`sudo systemctl restart ticket-api-stellar-jira.service`（若僅 poller：`cycraft-xcockpit-connector.service`）
+
+規格與進度見 [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md)（v0.4：multi-tenant 資料隔離、MSSP Tenant 選單）；Tunnel 設定見 [`CLOUDFLARE_TUNNEL.md`](CLOUDFLARE_TUNNEL.md)。**GCP → 地端 VM 遷移**見 [`ONPREM_MIGRATION.md`](ONPREM_MIGRATION.md)。
+
+**Web 多租戶：** Platform 角色右上角 Tenant（MSSP＝全部）；tenant 角色僅見 `users.tenant_source_id`。Registry 與 automation 共用 `config/stellar_tenants.json`。
 
 **HTTP 健康檢查**（`./serve_api` 或 `stellar-soc-api`）：`GET /health`、`GET /health/ready`。
 
@@ -120,8 +138,8 @@ Tenant 重新啟用後，automation 會重試 quarantine 中可正確歸屬的 c
 
 | source_id | Stellar tenant | customer_code | products | 狀態 |
 |-----------|----------------|---------------|----------|------|
-| `jjnet` | `JJNET` | `JJNET` | darktrace, cortex | enabled |
-| `jjnet-edr` | `JJNET-EDR` | `JJEDR` | cortex | enabled |
+| `jjnet` | `JJNET` | `JJNET` | darktrace, cortex | enabled | **CyCraft EDR 整合（營運 tenant）** |
+| `jjnet-edr` | `JJNET-EDR` | `JJEDR` | cortex | enabled | EDR/Cortex；**非** CyCraft connector tenant |
 
 | 指令 | 說明 |
 |------|------|

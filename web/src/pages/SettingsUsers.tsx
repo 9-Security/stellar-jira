@@ -1,29 +1,48 @@
 import { type FormEvent, useEffect, useState } from "react";
 import {
   createUser,
+  fetchMe,
   fetchUsers,
   patchUser,
   resetUserTotp,
   type User,
 } from "../api";
+import { useTenant } from "../TenantContext";
 
-const ROLES = [
-  "platform_admin",
-  "soc_analyst",
-  "soc_viewer",
-  "tenant_admin",
-  "tenant_viewer",
-];
-
+const PLATFORM_ROLES = ["platform_admin", "soc_analyst", "soc_viewer"];
+const TENANT_ROLES = ["tenant_admin", "tenant_viewer"];
+const ALL_ROLES = [...PLATFORM_ROLES, ...TENANT_ROLES];
 const TOTP_POLICIES = ["off", "optional", "required"];
 
+function isTenantRole(role: string): boolean {
+  return TENANT_ROLES.includes(role);
+}
+
 export function SettingsUsersPage() {
+  const { tenants } = useTenant();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("soc_analyst");
+  const [tenantSourceId, setTenantSourceId] = useState("");
   const [totpPolicy, setTotpPolicy] = useState("optional");
+
+  const isPlatformAdmin = currentUser?.role === "platform_admin";
+  const isTenantAdmin = currentUser?.role === "tenant_admin";
+  const creatableRoles = isTenantAdmin ? TENANT_ROLES : ALL_ROLES;
+
+  useEffect(() => {
+    fetchMe().then(setCurrentUser).catch(() => setCurrentUser(null));
+  }, []);
+
+  useEffect(() => {
+    if (isTenantAdmin && currentUser?.tenant_source_id) {
+      setTenantSourceId(currentUser.tenant_source_id);
+      if (!TENANT_ROLES.includes(role)) setRole("tenant_viewer");
+    }
+  }, [currentUser, isTenantAdmin, role]);
 
   function load() {
     fetchUsers()
@@ -39,12 +58,22 @@ export function SettingsUsersPage() {
     e.preventDefault();
     setError("");
     try {
-      await createUser({
+      const payload: {
+        email: string;
+        password: string;
+        role: string;
+        totp_policy: string;
+        tenant_source_id?: string | null;
+      } = {
         email,
         password,
         role,
         totp_policy: totpPolicy,
-      });
+      };
+      if (isPlatformAdmin && isTenantRole(role)) {
+        payload.tenant_source_id = tenantSourceId || null;
+      }
+      await createUser(payload);
       setEmail("");
       setPassword("");
       load();
@@ -63,9 +92,20 @@ export function SettingsUsersPage() {
     load();
   }
 
+  async function changeRole(user: User, newRole: string) {
+    await patchUser(user.id, { role: newRole });
+    load();
+  }
+
   async function onResetTotp(user: User) {
     await resetUserTotp(user.id);
     load();
+  }
+
+  function tenantDisplay(sourceId?: string | null): string {
+    if (!sourceId) return "—";
+    const t = tenants.find((x) => x.source_id === sourceId);
+    return t?.report_title || t?.tenant_name || sourceId;
   }
 
   return (
@@ -95,13 +135,30 @@ export function SettingsUsersPage() {
             <div>
               <label className="muted">角色</label>
               <select value={role} onChange={(e) => setRole(e.target.value)}>
-                {ROLES.map((r) => (
+                {creatableRoles.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
                 ))}
               </select>
             </div>
+            {isPlatformAdmin && isTenantRole(role) && (
+              <div>
+                <label className="muted">Tenant</label>
+                <select
+                  value={tenantSourceId}
+                  onChange={(e) => setTenantSourceId(e.target.value)}
+                  required
+                >
+                  <option value="">選擇 Tenant</option>
+                  {tenants.map((t) => (
+                    <option key={t.source_id} value={t.source_id}>
+                      {t.report_title || t.tenant_name || t.source_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="muted">2FA 政策</label>
               <select value={totpPolicy} onChange={(e) => setTotpPolicy(e.target.value)}>
@@ -125,6 +182,7 @@ export function SettingsUsersPage() {
             <tr>
               <th>Email</th>
               <th>角色</th>
+              <th>Tenant</th>
               <th>2FA 政策</th>
               <th>已綁定</th>
               <th>狀態</th>
@@ -135,7 +193,23 @@ export function SettingsUsersPage() {
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.email}</td>
-                <td>{u.role}</td>
+                <td>
+                  {isPlatformAdmin ? (
+                    <select
+                      value={u.role}
+                      onChange={(e) => changeRole(u, e.target.value)}
+                    >
+                      {ALL_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    u.role
+                  )}
+                </td>
+                <td>{tenantDisplay(u.tenant_source_id)}</td>
                 <td>
                   <select
                     value={u.totp_policy}

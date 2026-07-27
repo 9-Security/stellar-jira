@@ -37,12 +37,18 @@ class CaseNumberIndex:
         return self.by_middleware.get(key.upper()) or self.by_middleware.get(key)
 
 
-def load_case_number_index(path: Path, source_id: str) -> CaseNumberIndex:
+def load_case_number_index(
+    path: Path,
+    source_id: str,
+    *,
+    tenant_source_id: str | None = None,
+) -> CaseNumberIndex:
     """Load latest middleware_case_id per stellar case / jira key."""
     index = CaseNumberIndex()
     if not path.is_file():
         return index
     sid = str(source_id or "stellar").strip() or "stellar"
+    tenant = str(tenant_source_id or "").strip() or None
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10) as db:
         has_table = db.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='decision_events' LIMIT 1"
@@ -50,13 +56,25 @@ def load_case_number_index(path: Path, source_id: str) -> CaseNumberIndex:
         if not has_table:
             return index
         db.row_factory = sqlite3.Row
-        rows = db.execute(
-            "SELECT stellar_case_id, middleware_case_id, jira_key, created_at "
-            "FROM decision_events "
-            "WHERE source_id=? AND middleware_case_id IS NOT NULL AND TRIM(middleware_case_id) != '' "
-            "ORDER BY created_at DESC",
-            (sid,),
-        ).fetchall()
+        if tenant:
+            rows = db.execute(
+                "SELECT e.stellar_case_id, e.middleware_case_id, e.jira_key, e.created_at "
+                "FROM decision_events e "
+                "INNER JOIN incident_jira ij "
+                "ON ij.source_id=e.source_id AND ij.incident_id=e.stellar_case_id "
+                "WHERE e.source_id=? AND ij.tenant_source_id=? "
+                "AND e.middleware_case_id IS NOT NULL AND TRIM(e.middleware_case_id) != '' "
+                "ORDER BY e.created_at DESC",
+                (sid, tenant),
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT stellar_case_id, middleware_case_id, jira_key, created_at "
+                "FROM decision_events "
+                "WHERE source_id=? AND middleware_case_id IS NOT NULL AND TRIM(middleware_case_id) != '' "
+                "ORDER BY created_at DESC",
+                (sid,),
+            ).fetchall()
     for row in rows:
         mid = str(row["middleware_case_id"] or "").strip()
         if not mid:
@@ -143,6 +161,7 @@ def resolve_case_lookup_key(
     *,
     path: Path,
     source_id: str,
+    tenant_source_id: str | None = None,
 ) -> str:
     """Map XSOC case number (or pass-through jira / stellar id) to lookup key."""
     key = str(case_id or "").strip()
@@ -150,7 +169,7 @@ def resolve_case_lookup_key(
         return key
     if not path.is_file():
         return key
-    index = load_case_number_index(path, source_id)
+    index = load_case_number_index(path, source_id, tenant_source_id=tenant_source_id)
     stellar = index.stellar_for_middleware(key)
     if stellar:
         return stellar

@@ -51,6 +51,8 @@ Tools/run — Stellar Cyber → Jira AIxSOC
   tenant-quarantine      列出 unknown / mismatch / disabled cases
   tenant-backfill        舊 Jira link 補 tenant metadata（加 --apply）
   platform-user          Platform 使用者管理（create / list）
+  cycraft-poller         CyCraft XCockpit → Stellar XDR 常駐輪詢
+  cycraft-test-xcockpit  測試 XCockpit API（不寫 Stellar）
   web-build              建置 Web UI（web/dist，需 Node.js）
   cloudflare-tunnel-setup  Cloudflare Tunnel（--preflight 預裝；填 Token 後執行）
   maiagent-trial         旁路試跑 MaiAgent（不寄信／不改 Groq；需 MAIAGENT_API_KEY + CHATBOT_ID）
@@ -207,6 +209,14 @@ if errors:
   platform-user)
     _ensure_venv
     exec "$VENV_PY" "$ROOT/scripts/platform_user_admin.py" "$@"
+    ;;
+  cycraft-poller)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/cycraft_poller.py"
+    ;;
+  cycraft-test-xcockpit)
+    _ensure_venv
+    exec "$VENV_PY" "$ROOT/scripts/cycraft_test_xcockpit.py"
     ;;
   web-build)
     NODE_BIN="$ROOT/.tools/node-v22.14.0-linux-x64/bin"

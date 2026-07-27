@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from app.config import StellarSettings
 from app.demo.case_number import CaseNumberIndex, enrich_case_row, load_case_number_index
 from app.demo.overview_query import OverviewQuery
 from app.demo.case_service import sync_db_path
+from app.demo.tenant_access import (
+    filter_live_cases_for_tenant,
+    get_registry_tenant,
+    stellar_api_tenant_id,
+)
 from app.stellar.case_display_name import stellar_case_display_name
 from app.stellar.client import StellarClient
-from app.stellar.tenants import get_tenant_by_source_id, load_stellar_tenants
+from app.stellar.tenant_model import StellarTenant
 
 logger = logging.getLogger(__name__)
-_REPO_ROOT = Path(__file__).resolve().parents[2]
 _TERMINAL_STATUSES = frozenset({"resolved", "closed", "cancelled", "done"})
 _RECENT_CASES_LIMIT = 50
 
@@ -25,31 +28,17 @@ def _is_open_status(status: str | None) -> bool:
     return str(status or "").strip().lower() not in _TERMINAL_STATUSES
 
 
-def _resolve_stellar_tenant_id(
-    st: StellarSettings,
-    tenant_source_id: str | None,
-) -> str | None:
-    if not tenant_source_id:
-        return None
-    try:
-        tenants = load_stellar_tenants(st, _REPO_ROOT)
-    except OSError as e:
-        logger.warning("tenant registry load failed: %s", e)
-        return None
-    tenant = get_tenant_by_source_id(tenants, tenant_source_id)
-    if tenant is None:
-        return None
-    tid = str(tenant.tenant_id or "").strip()
-    return tid or None
-
-
 def _case_ms(case: dict[str, Any], field: str) -> int:
     if field == "created_at":
         return int(case.get("created_at") or 0)
     return int(case.get("modified_at") or 0)
 
 
-def _row_from_live_case(case: dict[str, Any]) -> dict[str, Any]:
+def _row_from_live_case(
+    case: dict[str, Any],
+    *,
+    registry_tenant: StellarTenant | None = None,
+) -> dict[str, Any]:
     bundle = {"case": case}
     title = stellar_case_display_name(case, bundle)
     severity = str(case.get("severity") or "").strip() or None
@@ -57,9 +46,13 @@ def _row_from_live_case(case: dict[str, Any]) -> dict[str, Any]:
     return {
         "stellar_case_id": case.get("_id"),
         "jira_key": None,
-        "tenant_source_id": None,
-        "tenant_name": case.get("tenant_name"),
-        "customer_code": None,
+        "tenant_source_id": registry_tenant.source_id if registry_tenant else None,
+        "tenant_name": (
+            registry_tenant.tenant_name or case.get("tenant_name")
+            if registry_tenant
+            else case.get("tenant_name")
+        ),
+        "customer_code": registry_tenant.customer_code if registry_tenant else None,
         "title": title,
         "severity": severity,
         "status": status,
@@ -103,6 +96,7 @@ def _aggregate(
     query: OverviewQuery,
     *,
     number_index: CaseNumberIndex | None = None,
+    registry_tenant: StellarTenant | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     total = 0
@@ -115,7 +109,10 @@ def _aggregate(
     recent: list[dict[str, Any]] = []
 
     for case in cases:
-        row = enrich_case_row(_row_from_live_case(case), number_index)
+        row = enrich_case_row(
+            _row_from_live_case(case, registry_tenant=registry_tenant),
+            number_index,
+        )
         total += 1
         if row.get("is_open"):
             open_count += 1
@@ -125,7 +122,9 @@ def _aggregate(
             critical_high += 1
         status = str(row.get("status") or "Unknown")
         by_status[status] = by_status.get(status, 0) + 1
-        tenant_key = str(row.get("tenant_name") or "unknown")
+        tenant_key = str(
+            row.get("tenant_source_id") or row.get("tenant_name") or "unknown"
+        )
         by_tenant[tenant_key] = by_tenant.get(tenant_key, 0) + 1
         basis_ms = _case_ms(case, query.new_basis_field)
         if query.since_ms is None:
@@ -168,23 +167,28 @@ async def build_live_overview(
     if not base or not api_key:
         raise RuntimeError("Stellar API not configured")
 
-    tenant_id = _resolve_stellar_tenant_id(st, tenant_source_id)
+    registry_tenant = (
+        get_registry_tenant(st, tenant_source_id) if tenant_source_id else None
+    )
+    tenant_id = stellar_api_tenant_id(st, tenant_source_id)
     async with StellarClient(base_url=base, api_key=api_key) as client:
         cases, truncated = await _fetch_cases(client, query, tenant_id=tenant_id)
 
-    if tenant_source_id and not tenant_id:
-        needle = tenant_source_id.strip().lower()
-        filtered = [
-            c
-            for c in cases
-            if needle in str(c.get("tenant_name") or "").lower()
-            or needle in str(c.get("cust_id") or "").lower()
-        ]
-        cases = filtered
+    if tenant_source_id:
+        cases = filter_live_cases_for_tenant(st, tenant_source_id, cases)
 
     source_id = str(st.stellar_poll_source_id or "stellar").strip() or "stellar"
-    number_index = load_case_number_index(sync_db_path(st), source_id)
-    payload = _aggregate(cases, query, number_index=number_index)
+    number_index = load_case_number_index(
+        sync_db_path(st),
+        source_id,
+        tenant_source_id=tenant_source_id,
+    )
+    payload = _aggregate(
+        cases,
+        query,
+        number_index=number_index,
+        registry_tenant=registry_tenant,
+    )
     payload["meta"]["truncated"] = truncated
     if tenant_source_id:
         payload["meta"]["tenant_source_id"] = tenant_source_id

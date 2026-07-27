@@ -561,6 +561,10 @@ class PlatformSettings(BaseSettings):
         default=True,
         description="Allow first login without TOTP to reach /v1/auth/totp/* setup only.",
     )
+    platform_public_exposure: bool = Field(
+        default=False,
+        description="Service is reachable on the public internet; disables bootstrap password-only login.",
+    )
     platform_login_rate_limit_attempts: int = Field(
         default=10,
         ge=0,

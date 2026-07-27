@@ -21,8 +21,8 @@
 - Jira Cloud `AIXSOC` 是案件管理與人工覆核介面。
 - Decision Layer 提供 escalation、playbook、通知、advisory 與 audit。
 - LLM 只產生說明／通知文字，不可覆寫規則結果或自動執行隔離。
-- 本 repo 不直接同步 Cortex XDR API；Cortex 類型告警可經 Stellar case
-  進入同步與報表。
+- 目前啟用 registry tenant 見 `config/stellar_tenants.json`；CyCraft connector 營運綁定 **`jjnet`**（非 `jjnet-edr`）。
+- 外部整合器設定在 `platform.db` **`tenant_integrations`**（非 PRD 規劃的 `tenant_settings` 表）。
 
 ## 2. MVP 目標
 
@@ -64,8 +64,10 @@ Incremental Jira writeback
 
 服務：
 
-- systemd：`ticket-api-stellar-jira.service`
-- log：`/var/log/stellar_jira.log`
+- automation：`ticket-api-stellar-jira.service`
+- xMDR HTTP + UI：`stellar-soc-api.service`（`127.0.0.1:8000`，`web/dist`）
+- 可選 CyCraft poller：`cycraft-xcockpit-connector.service`（tenant **`jjnet`**；設定見 `platform.db` `tenant_integrations` + xMDR 外部整合器）
+- log：`/var/log/stellar_jira.log`；API log：`/var/log/stellar_soc_api.log`
 - state DB：`data/stellar_sync_state.sqlite`
 - large snapshots：`data/case_archive/`
 
@@ -90,8 +92,8 @@ Incremental Jira writeback
 
 | source_id | tenant_name | customer_code | products | Jira |
 |-----------|-------------|---------------|----------|------|
-| `jjnet` | `JJNET` | `JJNET` | darktrace, cortex | `AIXSOC` |
-| `jjnet-edr` | `JJNET-EDR` | `JJEDR` | cortex | `AIXSOC` |
+| `jjnet` | `JJNET` | `JJNET` | darktrace, cortex | `AIXSOC` | CyCraft EDR 整合（營運） |
+| `jjnet-edr` | `JJNET-EDR` | `JJEDR` | cortex | `AIXSOC` | 非 CyCraft tenant |
 
 ### 4.2 Classification
 

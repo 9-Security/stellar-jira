@@ -102,6 +102,9 @@ class TestDemoApi(unittest.TestCase):
         self._stellar_patch.start()
 
     def tearDown(self) -> None:
+        from app.platform.rate_limit import reset_login_rate_limiter
+
+        reset_login_rate_limiter()
         self._stellar_patch.stop()
         app.dependency_overrides.clear()
         self.tmp.cleanup()

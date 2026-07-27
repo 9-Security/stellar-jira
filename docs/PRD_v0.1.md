@@ -6,8 +6,9 @@
 # PRD v0.1 — Stellar SOC Platform（多租戶 MDR 平台）
 
 - **文件版本：** v0.1  
-- **文件狀態：** Draft（產品規格基線，待實作）  
-- **文件日期：** 2026-07-23  
+- **文件狀態：** Draft（產品規格基線，**多數未實作**；勿與 xMDR Demo 混淆）  
+- **文件日期：** 2026-07-23（規格草稿；**未實作**）  
+- **已上線產品：** 見 [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md)（單一 xMDR Web，非本 PRD 雙 Portal）  
 - **適用倉庫：** `stellar-jira`（產品演進中；由 Stellar↔Jira middleware 轉型為自有平台）  
 - **技術/runtime 參考：** `docs/CURRENT_RUNTIME.md`（現行同步行為）、`env.example`  
 - **取代關係：** 本 PRD 為 **新產品** 規格；`Security_Decision_Platform_MVP_Spec_v1.0.md` 描述已上線的 Jira 中介層，兩者並存至實作完成遷移

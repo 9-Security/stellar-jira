@@ -36,13 +36,14 @@ class SlidingWindowRateLimiter:
 _login_limiter = SlidingWindowRateLimiter()
 
 
-def record_auth_failure(
+def consume_login_attempt(
     ip: str | None,
     *,
     email: str | None = None,
     max_attempts: int,
     window_seconds: int,
 ) -> None:
+    """Count every login/TOTP attempt (success or failure) before expensive work."""
     keys = [f"ip:{(ip or 'unknown').strip() or 'unknown'}"]
     normalized_email = str(email or "").strip().lower()
     if normalized_email:
@@ -57,6 +58,26 @@ def record_auth_failure(
                 status_code=429,
                 detail="Too many login attempts; try again later",
             )
+
+
+def record_auth_failure(
+    ip: str | None,
+    *,
+    email: str | None = None,
+    max_attempts: int,
+    window_seconds: int,
+) -> None:
+    """Backward-compatible alias; prefer consume_login_attempt at request start."""
+    consume_login_attempt(
+        ip,
+        email=email,
+        max_attempts=max_attempts,
+        window_seconds=window_seconds,
+    )
+
+
+def reset_login_rate_limiter() -> None:
+    _login_limiter.reset()
 
 
 def check_login_rate_limit(

@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { fetchCase } from "../api";
+import { useTenant } from "../TenantContext";
 
 export function CaseDetailPage() {
   const { caseId = "" } = useParams();
+  const { tenantQueryParam } = useTenant();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchCase>>["data"] | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchCase(caseId)
+    fetchCase(caseId, tenantQueryParam)
       .then((res) => setData(res.data))
       .catch((e) => setError(e instanceof Error ? e.message : "載入失敗"));
-  }, [caseId]);
+  }, [caseId, tenantQueryParam]);
 
   if (error) return <div className="error">{error}</div>;
   if (!data) return <p className="muted">載入中…</p>;

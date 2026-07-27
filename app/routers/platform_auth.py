@@ -16,7 +16,7 @@ from app.platform.deps import (
     require_full_session,
 )
 from app.platform.roles import is_platform_role
-from app.platform.rate_limit import record_auth_failure
+from app.platform.rate_limit import consume_login_attempt
 from app.platform.session_cookie import clear_session_cookie, set_session_cookie
 from app.platform.totp_policy import (
     login_requires_totp_setup,
@@ -89,6 +89,12 @@ def _login_response(
     )
 
 
+def _bootstrap_password_login_allowed(settings: PlatformSettings) -> bool:
+    if settings.platform_public_exposure:
+        return False
+    return bool(settings.platform_bootstrap_allow_password_only)
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(
     body: LoginRequest,
@@ -101,14 +107,14 @@ def login(
         raise HTTPException(status_code=503, detail="Platform auth is disabled")
 
     ip = audit_request_ip(request, settings)
+    consume_login_attempt(
+        ip,
+        email=body.email,
+        max_attempts=settings.platform_login_rate_limit_attempts,
+        window_seconds=settings.platform_login_rate_limit_window_seconds,
+    )
     user = store.get_user_by_email(body.email)
     if user is None or not verify_password(body.password, str(user.get("password_hash") or "")):
-        record_auth_failure(
-            ip,
-            email=body.email,
-            max_attempts=settings.platform_login_rate_limit_attempts,
-            window_seconds=settings.platform_login_rate_limit_window_seconds,
-        )
         store.record_audit(
             user_id=user["id"] if user else None,
             action="login_failed",
@@ -129,7 +135,7 @@ def login(
         )
 
     if login_requires_totp_setup(user):
-        if not settings.platform_bootstrap_allow_password_only:
+        if not _bootstrap_password_login_allowed(settings):
             raise HTTPException(status_code=403, detail="TOTP setup required before login")
         store.record_audit(user_id=user["id"], action="login_bootstrap", ip_address=ip)
         return _issue_session(
@@ -160,6 +166,12 @@ def verify_totp_login(
         raise HTTPException(status_code=503, detail="Platform auth is disabled")
 
     ip = audit_request_ip(request, settings)
+    consume_login_attempt(
+        ip,
+        email=None,
+        max_attempts=settings.platform_login_rate_limit_attempts,
+        window_seconds=settings.platform_login_rate_limit_window_seconds,
+    )
 
     try:
         claims = decode_token(settings, body.login_token, expected_type="login")
@@ -171,12 +183,6 @@ def verify_totp_login(
         raise HTTPException(status_code=401, detail="User not found or inactive")
     secret = str(user.get("totp_secret") or "")
     if not secret or not verify_totp_code(secret, body.code):
-        record_auth_failure(
-            ip,
-            email=str(user.get("email") or ""),
-            max_attempts=settings.platform_login_rate_limit_attempts,
-            window_seconds=settings.platform_login_rate_limit_window_seconds,
-        )
         store.record_audit(
             user_id=user["id"],
             action="totp_verify_failed",

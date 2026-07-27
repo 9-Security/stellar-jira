@@ -27,6 +27,18 @@
 
 ## Tier 3 — Do not read by default (token waste)
 
+**Tier 3 飄移掃描（2026-07-27）— 相對於 `CURRENT_RUNTIME.md` + `DEMO_MVP_v0.1.md` + 程式碼：**
+
+| 文件 | 狀態 | 主要飄移（勿當 runtime） |
+|------|------|-------------------------|
+| [`PRD_v0.1.md`](PRD_v0.1.md) | Draft 未實作 | 雙 Portal（SOC + Client）、`tenant_settings` DB 表、取代 Jira 為 Platform Ticket、Email 結案主通道 — **均未上線** |
+| [`ACTUAL_ARCHITECTURE_FOR_SPEC.md`](ACTUAL_ARCHITECTURE_FOR_SPEC.md) | 2026-07-16 摘要 | 缺 `stellar-soc-api`、xMDR Web、`/v1/settings`、CyCraft inbound；僅列 automation service |
+| [`Security_Decision_Platform_MVP_Spec_v1.0.md`](Security_Decision_Platform_MVP_Spec_v1.0.md) | v1.2 baseline | 同步/Jira/Decision 仍準；缺 xMDR、`platform.db` 整合器、`tenant_integrations`、CyCraft poller |
+| [`README.md`](README.md) | 人類入門 | 已補 xMDR / `web/`；細節以 Tier 1 為準 |
+
+**已上線 xMDR（老闆 Demo）** 見 [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md) v0.6，不是 PRD 雙 Portal。  
+**CyCraft 營運 tenant：** `jjnet`（JJNET）。`env.example` 曾用 `jjnet-edr` 僅作 env suffix **範例**，不代表 CyCraft 綁在 JJNET-EDR。
+
 | File | Why skip | Read only if |
 |------|----------|--------------|
 | [`PRD_v0.1.md`](PRD_v0.1.md) | **~700 lines** future dual-portal product spec; most **not implemented** | User asks for full PRD / long-term product design |
@@ -48,7 +60,7 @@ See [`archive/README.md`](archive/README.md).
 
 | Doc | Purpose |
 |-----|---------|
-| [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md) | **xMDR 老闆 Demo（已上線）** — 見文件 Tier 2 標記 |
+| [`DEMO_MVP_v0.1.md`](DEMO_MVP_v0.1.md) | **xMDR 老闆 Demo（已上線，v0.6 tenant 設定 / 外部整合器）** — 見文件 Tier 2 標記 |
 | [`PRD_v0.1.md`](PRD_v0.1.md) | Future platform PRD — **AI: do not read by default** |
 | [`Security_Decision_Platform_MVP_Spec_v1.0.md`](Security_Decision_Platform_MVP_Spec_v1.0.md) | Jira middleware spec — **AI: do not read by default** |
 

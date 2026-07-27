@@ -16,7 +16,7 @@
 
 | Task area | Doc |
 |-----------|-----|
-| xMDR Web / login / dashboard / demo API | [`docs/DEMO_MVP_v0.1.md`](docs/DEMO_MVP_v0.1.md) + `app/platform/`, `app/demo/`, `web/` |
+| xMDR Web / demo API / tenant 設定 | [`docs/DEMO_MVP_v0.1.md`](docs/DEMO_MVP_v0.1.md) + `app/platform/`, `app/demo/`, `app/routers/tenant_settings.py`, `web/` |
 | Cloudflare Tunnel / public URL | [`docs/CLOUDFLARE_TUNNEL.md`](docs/CLOUDFLARE_TUNNEL.md) |
 | Decision Layer | [`docs/DECISION_LAYER.md`](docs/DECISION_LAYER.md) |
 
@@ -54,6 +54,10 @@ Trust: **running `.env` + `docs/CURRENT_RUNTIME.md` + code** ≫ `docs/MAINTENAN
 
 - URL: https://xmdr.nine-security.com
 - Read-only dashboard + cases over sync DB / Stellar live API
+- **Multi-tenant:** MSSP tenant switcher; tenant roles scoped to `users.tenant_source_id`
+- **CyCraft EDR:** optional inbound at `app/integrations/cycraft/`; UI 設定中心 → 外部整合器（`+` → CyCraft Connector；儲存/Test；tenant 隔離）
+- **Branding:** customer-facing xMDR UI says **AIxSOC** only (not Stellar Cyber)
+- Per-tenant integration config in `platform.db` `tenant_integrations` (+ encrypted secrets); APIs under `/v1/settings/integrations`
 - `platform.db` for users; does **not** replace Jira automation
 
 ## Services
@@ -62,7 +66,8 @@ Trust: **running `.env` + `docs/CURRENT_RUNTIME.md` + code** ≫ `docs/MAINTENAN
 |---------|------|
 | `ticket-api-stellar-jira.service` | Stellar↔Jira automation |
 | `stellar-soc-api.service` | xMDR API + `web/dist` (`127.0.0.1:8000`) |
+| `cycraft-xcockpit-connector.service` | CyCraft multi-tenant poller → AIxSOC ingest webhook (optional) |
 | `cloudflared-stellar-soc.service` | Tunnel to public URL |
 
-Log: `/var/log/stellar_jira.log`  
-After changing Python under `app/`: restart the relevant service (`MAINTENANCE.md`).
+Log: `/var/log/stellar_jira.log` (automation); `/var/log/stellar_soc_api.log` (HTTP API)  
+After changing Python under `app/`: restart the relevant service (`MAINTENANCE.md`) — **settings/UI → `stellar-soc-api`**; **poll/writeback → `ticket-api-stellar-jira`**; **CyCraft poller → `cycraft-xcockpit-connector`**.

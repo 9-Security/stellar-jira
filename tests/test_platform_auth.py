@@ -23,6 +23,9 @@ def _totp_secret_from_uri(uri: str) -> str:
 
 class TestPlatformAuth(unittest.TestCase):
     def setUp(self) -> None:
+        import os
+
+        os.environ["PLATFORM_PUBLIC_EXPOSURE"] = "false"
         self.tmp = tempfile.TemporaryDirectory()
         self.db = Path(self.tmp.name) / "platform.db"
         self.settings = PlatformSettings(
@@ -31,6 +34,7 @@ class TestPlatformAuth(unittest.TestCase):
             platform_secret_key="test-secret-key-for-jwt-signing-32chars",
             platform_require_totp=True,
             platform_bootstrap_allow_password_only=True,
+            platform_public_exposure=False,
             platform_cookie_secure=False,
         )
         store = PlatformStore(self.db)
@@ -58,6 +62,9 @@ class TestPlatformAuth(unittest.TestCase):
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
+        from app.platform.rate_limit import reset_login_rate_limiter
+
+        reset_login_rate_limiter()
         app.dependency_overrides.clear()
         self.tmp.cleanup()
 

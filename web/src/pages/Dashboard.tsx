@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { caseHref, caseLabel, caseRowKey, isTicketed } from "../caseDisplay";
 import { fetchOverview } from "../api";
+import { useTenant } from "../TenantContext";
 
 type OverviewMeta = {
   source?: string;
@@ -59,7 +60,7 @@ function BarList({ title, data }: { title: string; data: Record<string, number> 
 }
 
 function sourceLabel(meta?: OverviewMeta): string {
-  if (meta?.source === "stellar_live") return "Stellar 即時";
+  if (meta?.source === "stellar_live") return "AIxSOC 即時";
   if (meta?.source === "sync_db") return "AI SOC 同步";
   return "AI SOC 同步結果";
 }
@@ -81,6 +82,7 @@ function matchesSearch(c: CaseRow, q: string): boolean {
 }
 
 export function DashboardPage() {
+  const { tenantQueryParam, tenants, tenant, isPlatformScope } = useTenant();
   const [window, setWindow] = useState("12h");
   const [newBasis, setNewBasis] = useState("created");
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchOverview>> | null>(null);
@@ -92,10 +94,10 @@ export function DashboardPage() {
 
   const load = useCallback(() => {
     setError("");
-    fetchOverview({ window, newBasis })
+    fetchOverview({ window, newBasis, tenant: tenantQueryParam })
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "載入失敗"));
-  }, [window, newBasis]);
+  }, [window, newBasis, tenantQueryParam]);
 
   useEffect(() => {
     load();
@@ -124,6 +126,16 @@ export function DashboardPage() {
 
   const newLabel =
     newBasis === "modified" ? "區間內新案（修改）" : "區間內新案（建立）";
+
+  const scopeLabel = useMemo(() => {
+    if (!isPlatformScope) {
+      const own = tenants.find((t) => t.source_id === tenant);
+      return own?.report_title || own?.tenant_name || tenant || "Tenant";
+    }
+    if (!tenant) return "MSSP（全部 Tenant）";
+    const picked = tenants.find((t) => t.source_id === tenant);
+    return picked?.report_title || picked?.tenant_name || tenant;
+  }, [isPlatformScope, tenants, tenant]);
 
   if (error) return <div className="error">{error}</div>;
   if (!data) return <p className="muted">載入中…</p>;
@@ -161,7 +173,7 @@ export function DashboardPage() {
           重新整理
         </button>
       </div>
-      <p className="muted">資料來源：{sourceLabel(meta)}</p>
+      <p className="muted">資料範圍：{scopeLabel} · 資料來源：{sourceLabel(meta)}</p>
       <div className="cards">
         <StatCard label="總案件數" value={data.summary.total_cases} />
         <StatCard label="開放中" value={data.summary.open_cases} />

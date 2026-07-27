@@ -33,10 +33,12 @@ bash Tools/setup_env.sh
 # 每輪：global poll → tenant classify → create/poll-mirror → writeback
 ```
 
-Webhook API（可選，非 cycle 必要）：
+Webhook API（xMDR Web + 可選 webhook）：
 
 ```bash
 ./serve_api
+# 或 systemd: stellar-soc-api.service（127.0.0.1:8000）
+# xMDR UI + /v1/auth、/v1/demo、/v1/settings、/v1/admin
 # POST /v1/webhooks/jira-stellar   可選即時 Jira → Stellar
 # POST /v1/webhooks/line           LINE 查 ID
 ```
@@ -73,6 +75,9 @@ git push -u origin main
 | `app/jira/` | Jira REST client |
 | `app/sync/` | SQLite 狀態、案件編號、鎖、case snapshots |
 | `app/notify/` | SOC Email + LINE（內文＝Jira Description）；可選 MaiAgent full-case |
+| `app/integrations/cycraft/` | 可選 CyCraft → AIxSOC ingest connector |
+| `app/platform/` | xMDR 登入、`platform.db`、tenant 設定 API |
+| `web/` | xMDR React UI（`./Tools/run web-build` → `web/dist`） |
 | `app/decision/` | Decision Intelligence（規則／稽核；Description 區塊預設關閉） |
 | `config/` | 欄位／workflow／user map／decision 設定 |
 | `docs/` | **現行**文件；`docs/archive/` 為歷史 |

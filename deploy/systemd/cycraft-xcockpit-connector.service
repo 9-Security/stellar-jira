@@ -1,0 +1,43 @@
+# CyCraft XCockpit → AIxSOC ingest connector (integrated multi-tenant poller).
+# Install:
+#   sudo install -m 644 deploy/systemd/cycraft-xcockpit-connector.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cycraft-xcockpit-connector.service
+#
+# Requires CYCRAFT_CONNECTOR_ENABLED=true and tenant CyCraft toggle in xMDR UI.
+
+[Unit]
+Description=CyCraft XCockpit to AIxSOC ingest connector (stellar-jira)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/stellar-jira
+
+EnvironmentFile=-/etc/xmdr/.env
+EnvironmentFile=-/opt/stellar-jira/.env
+Environment=PYTHONPATH=/opt/stellar-jira
+
+ExecStart=/opt/stellar-jira/Tools/run cycraft-poller
+
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2
+StartLimitIntervalSec=300
+StartLimitBurst=15
+
+TimeoutStopSec=120
+KillSignal=SIGTERM
+KillMode=mixed
+
+Nice=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+StandardOutput=append:/var/log/cycraft_connector.log
+StandardError=append:/var/log/cycraft_connector.log
+SyslogIdentifier=cycraft-connector
+
+[Install]
+WantedBy=multi-user.target

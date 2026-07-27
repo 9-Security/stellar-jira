@@ -5,7 +5,7 @@
 # Stellar ↔ Jira AIxSOC — 實際運作與架構現況
 
 > **用途：** 給外部模型／規格改寫用的**單一現況來源**（可整份貼給 ChatGPT）。  
-> **日期：** 2026-07-16  
+> **日期：** 2026-07-27（摘要；細節以 `CURRENT_RUNTIME.md` 為準）  
 > **倉庫：** `stellar-jira`  
 > **權威順序：** 本文件摘要 ≪ `docs/CURRENT_RUNTIME.md` + `.env` + `app/` 程式碼；若規格與 runtime 衝突，以 runtime 為準。  
 > **規格基線：** `Security_Decision_Platform_MVP_Spec_v1.0.md` 已依本文與 runtime 對齊；`docs/archive/**` 仍只供歷史查考。
@@ -34,7 +34,8 @@
 | 項目 | 實際狀況 |
 |------|----------|
 | 名稱／角色 | Stellar Cyber → Jira AIxSOC **同步與自動化**；Decision／SOC 通知嵌在建票路徑 |
-| 服務 | `ticket-api-stellar-jira.service` |
+| 服務 | `ticket-api-stellar-jira.service`（automation）；**另** `stellar-soc-api.service`（xMDR API + `web/dist`，127.0.0.1:8000） |
+| 可選 | `cycraft-xcockpit-connector.service` — CyCraft → AIxSOC ingest（**tenant `jjnet`**，見 `tenant_integrations`） |
 | 日誌 | `/var/log/stellar_jira.log` |
 | 狀態庫 | `data/stellar_sync_state.sqlite` |
 | Case archive | `data/case_archive/`（大型 bundle 檔） |

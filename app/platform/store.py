@@ -59,6 +59,15 @@ class PlatformStore:
                 c.execute(
                     "ALTER TABLE users ADD COLUMN totp_policy TEXT NOT NULL DEFAULT 'optional'"
                 )
+            c.execute(
+                "CREATE TABLE IF NOT EXISTS tenant_integrations ("
+                "tenant_source_id TEXT PRIMARY KEY, "
+                "cycraft_enabled INTEGER NOT NULL DEFAULT 0, "
+                "xcockpit_customer_key TEXT, "
+                "config_json TEXT, "
+                "updated_at TEXT NOT NULL, "
+                "updated_by_user_id TEXT)"
+            )
             c.commit()
 
     def _row_to_user(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -185,16 +194,32 @@ class PlatformStore:
             raise ValueError("user not found")
         fields: list[str] = []
         params: list[Any] = []
-        if role is not None:
-            try:
-                parsed_role = UserRole(role)
-            except ValueError as e:
-                raise ValueError(f"invalid role: {role}") from e
-            fields.append("role=?")
-            params.append(parsed_role.value)
+
+        try:
+            final_role = UserRole(role) if role is not None else UserRole(str(user["role"]))
+        except ValueError as e:
+            raise ValueError(f"invalid role: {role}") from e
+
         if tenant_source_id is not None:
+            final_tenant = str(tenant_source_id).strip() or None
+        elif is_platform_role(final_role):
+            final_tenant = None
+        else:
+            final_tenant = user.get("tenant_source_id")
+
+        if is_platform_role(final_role) and final_tenant:
+            raise ValueError("platform roles must not have tenant_source_id")
+        if is_tenant_role(final_role) and not final_tenant:
+            raise ValueError("tenant roles require tenant_source_id")
+
+        if role is not None:
+            fields.append("role=?")
+            params.append(final_role.value)
+        if tenant_source_id is not None or (
+            role is not None and is_platform_role(final_role) and user.get("tenant_source_id")
+        ):
             fields.append("tenant_source_id=?")
-            params.append(str(tenant_source_id).strip() or None)
+            params.append(final_tenant)
         if totp_policy is not None:
             policy = normalize_totp_policy(totp_policy)
             fields.append("totp_policy=?")
@@ -278,6 +303,143 @@ class PlatformStore:
                 ),
             )
             c.commit()
+
+    def _row_to_integration(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "tenant_source_id": row["tenant_source_id"],
+            "cycraft_enabled": bool(row["cycraft_enabled"]),
+            "xcockpit_customer_key": row["xcockpit_customer_key"],
+            "config_json": row["config_json"],
+            "updated_at": row["updated_at"],
+            "updated_by_user_id": row["updated_by_user_id"],
+        }
+
+    def get_tenant_integration(self, tenant_source_id: str) -> dict[str, Any] | None:
+        tid = str(tenant_source_id or "").strip()
+        if not tid:
+            return None
+        with sqlite3.connect(self.path) as c:
+            c.row_factory = sqlite3.Row
+            row = c.execute(
+                "SELECT * FROM tenant_integrations WHERE tenant_source_id=?",
+                (tid,),
+            ).fetchone()
+        return self._row_to_integration(row)
+
+    def list_tenant_integrations(self) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.path) as c:
+            c.row_factory = sqlite3.Row
+            rows = c.execute(
+                "SELECT * FROM tenant_integrations ORDER BY tenant_source_id"
+            ).fetchall()
+        return [r for r in (self._row_to_integration(row) for row in rows) if r is not None]
+
+    def count_cycraft_enabled_tenants(self) -> int:
+        with sqlite3.connect(self.path) as c:
+            row = c.execute(
+                "SELECT COUNT(*) FROM tenant_integrations WHERE cycraft_enabled=1"
+            ).fetchone()
+        return int(row[0] or 0) if row else 0
+
+    def set_cycraft_enabled(
+        self,
+        tenant_source_id: str,
+        *,
+        enabled: bool,
+        updated_by_user_id: str | None = None,
+        xcockpit_customer_key: str | None = None,
+        cycraft_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        tid = str(tenant_source_id or "").strip()
+        if not tid:
+            raise ValueError("tenant_source_id required")
+        now = _utc_now()
+        existing = self.get_tenant_integration(tid)
+        cust_key = xcockpit_customer_key
+        if cust_key is None and existing:
+            cust_key = existing.get("xcockpit_customer_key")
+        config_json: str | None = None
+        if cycraft_config is not None:
+            import json
+
+            base_cfg = {}
+            if existing and existing.get("config_json"):
+                try:
+                    parsed = json.loads(str(existing["config_json"]))
+                    if isinstance(parsed, dict):
+                        base_cfg = parsed
+                except json.JSONDecodeError:
+                    base_cfg = {}
+            cycraft = dict(base_cfg.get("cycraft") or {})
+            for key, value in cycraft_config.items():
+                if key == "secrets_enc" and isinstance(value, dict):
+                    merged = dict(cycraft.get("secrets_enc") or {})
+                    merged.update(value)
+                    cycraft["secrets_enc"] = merged
+                else:
+                    cycraft[key] = value
+            base_cfg["cycraft"] = cycraft
+            config_json = json.dumps(base_cfg, ensure_ascii=False)
+        with sqlite3.connect(self.path) as c:
+            if existing is None:
+                c.execute(
+                    "INSERT INTO tenant_integrations ("
+                    "tenant_source_id, cycraft_enabled, xcockpit_customer_key, "
+                    "config_json, updated_at, updated_by_user_id"
+                    ") VALUES (?,?,?,?,?,?)",
+                    (
+                        tid,
+                        1 if enabled else 0,
+                        str(cust_key or "").strip() or None,
+                        config_json,
+                        now,
+                        updated_by_user_id,
+                    ),
+                )
+            else:
+                if config_json is not None:
+                    c.execute(
+                        "UPDATE tenant_integrations SET "
+                        "cycraft_enabled=?, xcockpit_customer_key=?, config_json=?, "
+                        "updated_at=?, updated_by_user_id=? "
+                        "WHERE tenant_source_id=?",
+                        (
+                            1 if enabled else 0,
+                            str(cust_key or "").strip() or None,
+                            config_json,
+                            now,
+                            updated_by_user_id,
+                            tid,
+                        ),
+                    )
+                else:
+                    c.execute(
+                        "UPDATE tenant_integrations SET "
+                        "cycraft_enabled=?, xcockpit_customer_key=?, updated_at=?, updated_by_user_id=? "
+                        "WHERE tenant_source_id=?",
+                        (
+                            1 if enabled else 0,
+                            str(cust_key or "").strip() or None,
+                            now,
+                            updated_by_user_id,
+                            tid,
+                        ),
+                    )
+            c.commit()
+        row = self.get_tenant_integration(tid)
+        assert row is not None
+        return row
+
+    def list_cycraft_enabled_integrations(self) -> list[dict[str, Any]]:
+        with sqlite3.connect(self.path) as c:
+            c.row_factory = sqlite3.Row
+            rows = c.execute(
+                "SELECT * FROM tenant_integrations WHERE cycraft_enabled=1 "
+                "ORDER BY tenant_source_id"
+            ).fetchall()
+        return [r for r in (self._row_to_integration(row) for row in rows) if r is not None]
 
     def public_user(self, user: dict[str, Any]) -> dict[str, Any]:
         return {

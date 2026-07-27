@@ -11,6 +11,7 @@ from typing import Any
 from app.config import StellarSettings
 from app.demo.case_number import enrich_case_row, load_case_number_index, resolve_case_lookup_key
 from app.demo.overview_query import OverviewQuery
+from app.demo.tenant_access import assert_link_in_tenant_scope
 from app.dates import format_detection_time
 from app.stellar.case_assets import extract_affected_hosts
 from app.stellar.case_display_name import stellar_case_display_name
@@ -114,6 +115,51 @@ def _list_links(
     return [dict(r) for r in rows]
 
 
+def _find_incident_link(
+    path: Path,
+    source_id: str,
+    case_id: str,
+    *,
+    tenant_source_id: str | None = None,
+) -> dict[str, Any]:
+    key = str(case_id or "").strip()
+    if not key:
+        raise ValueError("case id required")
+
+    candidates: list[str] = [key]
+    upper = key.upper()
+    if upper != key:
+        candidates.append(upper)
+    resolved = resolve_case_lookup_key(
+        key,
+        path=path,
+        source_id=source_id,
+        tenant_source_id=tenant_source_id,
+    )
+    if resolved and resolved not in candidates:
+        candidates.append(resolved)
+
+    clauses = ["source_id=?", "jira_key!=?"]
+    params: list[Any] = [source_id, PENDING_JIRA_KEY]
+    if tenant_source_id:
+        clauses.append("tenant_source_id=?")
+        params.append(tenant_source_id)
+    where = " AND ".join(clauses)
+
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10) as db:
+        db.row_factory = sqlite3.Row
+        for candidate in candidates:
+            row = db.execute(
+                f"SELECT incident_id, jira_key, synced_at, tenant_source_id, tenant_id, "
+                f"tenant_name, customer_code FROM incident_jira "
+                f"WHERE {where} AND (incident_id=? OR UPPER(jira_key)=?) LIMIT 1",
+                (*params, candidate, candidate.upper()),
+            ).fetchone()
+            if row is not None:
+                return dict(row)
+    raise LookupError(f"case not found: {case_id}")
+
+
 def _load_bundle(
     path: Path,
     source_id: str,
@@ -169,7 +215,11 @@ def build_overview(
     path = sync_db_path(st)
     source_id = _source_id(st)
     links = _list_links(st, tenant_source_id=tenant_source_id)
-    number_index = load_case_number_index(path, source_id)
+    number_index = load_case_number_index(
+        path,
+        source_id,
+        tenant_source_id=tenant_source_id,
+    )
     now = datetime.now(timezone.utc)
     oq = query or OverviewQuery(
         window="all",
@@ -248,7 +298,11 @@ def list_cases(
     path = sync_db_path(st)
     source_id = _source_id(st)
     links = _list_links(st, tenant_source_id=tenant_source_id)
-    number_index = load_case_number_index(path, source_id)
+    number_index = load_case_number_index(
+        path,
+        source_id,
+        tenant_source_id=tenant_source_id,
+    )
     rows: list[dict[str, Any]] = []
     for link in links:
         incident_id = str(link.get("incident_id") or "")
@@ -297,34 +351,23 @@ def get_case_detail(
 ) -> dict[str, Any]:
     path = sync_db_path(st)
     source_id = _source_id(st)
-    key = resolve_case_lookup_key(
+    link = _find_incident_link(
+        path,
+        source_id,
         case_id,
-        path=path,
-        source_id=source_id,
+        tenant_source_id=tenant_source_id,
     )
-    if not key:
-        raise ValueError("case id required")
-
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=10) as db:
-        db.row_factory = sqlite3.Row
-        row = db.execute(
-            "SELECT incident_id, jira_key, synced_at, tenant_source_id, tenant_id, "
-            "tenant_name, customer_code FROM incident_jira "
-            "WHERE source_id=? AND jira_key!=? AND (incident_id=? OR UPPER(jira_key)=?) "
-            "LIMIT 1",
-            (source_id, PENDING_JIRA_KEY, key, key.upper()),
-        ).fetchone()
-    if row is None:
-        raise LookupError(f"case not found: {case_id}")
-    link = dict(row)
-    if tenant_source_id and str(link.get("tenant_source_id") or "") != tenant_source_id:
-        raise PermissionError("tenant access denied")
+    assert_link_in_tenant_scope(link, tenant_source_id)
 
     incident_id = str(link["incident_id"])
     snapshot, bundle = _load_bundle(path, source_id, incident_id)
     if bundle is None:
         raise LookupError(f"no snapshot for case: {case_id}")
-    number_index = load_case_number_index(path, source_id)
+    number_index = load_case_number_index(
+        path,
+        source_id,
+        tenant_source_id=tenant_source_id,
+    )
 
     case = bundle.get("case") if isinstance(bundle.get("case"), dict) else {}
     summary_lines = stellar_case_detail_lines(case, bundle)

@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { caseHref, caseLabel, caseRowKey } from "../caseDisplay";
 import { fetchCases } from "../api";
+import { useTenant } from "../TenantContext";
 
 export function CasesPage() {
+  const { tenantQueryParam } = useTenant();
   const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState("");
@@ -14,6 +16,7 @@ export function CasesPage() {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (severity) params.set("severity", severity);
+    if (tenantQueryParam) params.set("tenant", tenantQueryParam);
     fetchCases(params)
       .then((res) => {
         setRows(res.data);
@@ -24,7 +27,7 @@ export function CasesPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [tenantQueryParam]);
 
   return (
     <>

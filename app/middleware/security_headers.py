@@ -18,6 +18,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+
+        if request.url.scheme == "https" or (
+            request.headers.get("X-Forwarded-Proto", "").strip().lower() == "https"
+        ):
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
 
         if path.startswith("/v1/"):
             response.headers["Cache-Control"] = "no-store"

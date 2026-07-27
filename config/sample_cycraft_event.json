@@ -1,0 +1,44 @@
+{
+  "ReportType": "CYCRAFT_E",
+  "ReportVersion": "1.0.0",
+  "ReportTime": "2026-01-13T17:00:00+08:00",
+  "ReportCopyright": "CyCraft Inc.",
+  "ReportID": "363253360",
+  "CustomerName": "QA",
+  "DateStart": "2026-01-13 16:28",
+  "DateEnd": "2026-01-13 16:33",
+  "Summary": {
+    "CompromisedComputerCnt": 1,
+    "ScannedEndpointCnt": 14486,
+    "MalwareCnt": 1,
+    "Networks": 3,
+    "ReportSeverity": 10
+  },
+  "Campaigns": [
+    {
+      "EndpointSummaryTable": [
+        {
+          "ComputerID": "Agent09521FCC058AD9D8",
+          "Reason": 9,
+          "Os": "Windows 10 Pro",
+          "ComputerName": "WORKSTATION-01",
+          "IPAddress": ["192.168.3.103"],
+          "Malwares": [
+            {
+              "FileName": "C:\\\\WINDOWS\\\\TEMP\\\\MALWARE.EXE",
+              "MD5": "AFFCEDAC2F856514E5A1C7FDBF43AD8E"
+            }
+          ],
+          "C2s": ["22.102.53.81", "HACKER.COM"],
+          "ThreatActivitys": [
+            "C:\\\\WINDOWS\\\\SYSWOW64\\\\CMD.EXE"
+          ],
+          "Severity": 10,
+          "GroupName": "GroupA",
+          "EventFirstSeen": "2026-01-13 16:28",
+          "EventLastSeen": "2026-01-13 16:31"
+        }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 
 from app.config import get_notify_settings, get_platform_settings, get_stellar_settings
+from app.routers import tenant_settings as tenant_settings_router
 from app.routers import admin_users as admin_users_router
 from app.routers import ai_data as ai_data_router
 from app.routers import demo as demo_router
@@ -37,6 +38,15 @@ def _validate_platform_security(ps) -> None:
             "PLATFORM_SECRET_KEY is missing or weak (need >=32 chars, not default). "
             "Platform login is unsafe until fixed."
         )
+    if ps.platform_public_exposure:
+        logger.warning(
+            "PLATFORM_PUBLIC_EXPOSURE=true: bootstrap password-only login is disabled; "
+            "restrict SSH/firewall and disable public exposure when demo ends."
+        )
+        if ps.platform_bootstrap_allow_password_only:
+            logger.warning(
+                "PLATFORM_BOOTSTRAP_ALLOW_PASSWORD_ONLY is ignored while public exposure is on."
+            )
 
 
 @asynccontextmanager
@@ -83,6 +93,7 @@ app.include_router(ai_data_router.router)
 app.include_router(platform_auth_router.router)
 app.include_router(demo_router.router)
 app.include_router(admin_users_router.router)
+app.include_router(tenant_settings_router.router)
 
 
 @app.get("/health")
@@ -106,7 +117,8 @@ def health_ready() -> dict[str, object]:
     except OSError as e:
         issues.append(f"state_db: {e}")
     if issues:
-        raise HTTPException(status_code=503, detail={"ready": False, "issues": issues})
+        logger.warning("health/ready not ready: %s", issues)
+        raise HTTPException(status_code=503, detail={"ready": False})
     return {"ready": True}
 
 

@@ -4,13 +4,16 @@
 # Current runtime (source of truth)
 
 > **For humans and AI agents:** This is the authoritative description of how
-> `stellar-jira` runs in production as of **2026-07-16**.
+> `stellar-jira` runs in production as of **2026-07-27**.
 > Do **not** infer sync behavior from files under `docs/archive/` or other
 > historical notes.
 
 Service: `ticket-api-stellar-jira.service`  
 Log: `/var/log/stellar_jira.log`  
 State DB: `data/stellar_sync_state.sqlite`
+
+**xMDR Web + HTTP API** (separate process): `stellar-soc-api.service` → `127.0.0.1:8000` (`./serve_api`, serves `web/dist` + `/v1/*`).  
+Restart **`stellar-soc-api`** after API/UI Python changes; **`ticket-api-stellar-jira`** after automation changes.
 
 ## Cycle model
 
@@ -172,6 +175,41 @@ STELLAR_POLL_SOURCE_ID=stellar
 
 There is **no** Stellar→Jira case webhook in this repo; inbound uses poll.
 
+## CyCraft EDR inbound (optional)
+
+Third-party EDR feed into the **same** AIxSOC case pipeline (not a second SOC stack).
+
+| Piece | Role |
+|-------|------|
+| `cycraft-xcockpit-connector.service` or `./Tools/run cycraft-poller` | Multi-tenant XCockpit poller (`app/integrations/cycraft/multi_poller.py`) |
+| Global `.env` | `CYCRAFT_CONNECTOR_ENABLED=true`; shared defaults (`STELLAR_BASE_URL`, poll interval, vendor labels) |
+| Per-tenant UI + DB | xMDR → 設定中心 → 外部整合器 (`/settings/integrations`); `platform.db` `tenant_integrations` |
+| Per-tenant secrets | UI saves encrypted keys in `config_json`; optional fallback `VAR__TENANT_SUFFIX` in `.env` |
+| State DB | `data/cycraft_state/{source_id}.sqlite` per tenant (watermarks isolated) |
+
+Flow:
+
+```text
+XCockpit (CyCraft) → connector → AIxSOC ingest webhook → platform cases
+  → existing global cases poll (ticket-api-stellar-jira) → Jira AIXSOC
+```
+
+- **Not duplicate with existing SOC poll:** global `STELLAR_API_KEY` reads cases; CyCraft connector **writes** alerts via a **tenant-specific ingest webhook**. Same case/Jira mapping (`stellar_case_id`) dedupes tickets.
+- **Duplicate risk** only if the same CyCraft alerts already enter the platform via another path **and** this connector.
+- **Customer-facing UI** uses **AIxSOC** branding only (no Stellar Cyber product name in xMDR screens).
+- **Tenant boundary:** `tenant_admin` sees/edits own tenant only; secrets never cross tenants.
+- APIs: `GET/PATCH /v1/settings/integrations`, `POST …/cycraft/test`. See `docs/DEMO_MVP_v0.1.md` §4.5.
+
+## xMDR tenant settings API
+
+| Endpoint | Access |
+|----------|--------|
+| `GET /v1/settings/integrations` | `platform_admin` (all visible tenants) / `tenant_admin` (own tenant); `tenant_viewer` → 403 |
+| `PATCH /v1/settings/integrations/{tenant_source_id}` | Same; non-secret fields + encrypted API keys in DB |
+| `POST /v1/settings/integrations/{tenant_source_id}/cycraft/test` | XCockpit + optional ingest webhook probe |
+
+Code: `app/routers/tenant_settings.py`, `app/platform/tenant_scope.py`, `app/platform/tenant_secrets.py`.
+
 ## Read-only case API (`/v1/ai-data`)
 
 Local FastAPI (`./serve_api`) can expose archived case snapshots for external AI/tools:
@@ -182,7 +220,7 @@ Local FastAPI (`./serve_api`) can expose archived case snapshots for external AI
 | `GET /v1/ai-data/cases/{jira_key}` | Case bundle sections from latest snapshot |
 | `GET /v1/ai-data/cases/{jira_key}/alerts` | Paginated alerts from that snapshot |
 
-Auth: `AI_DATA_API_TOKEN` (Bearer / `X-AI-Data-Token`); if unset, loopback only. Read-only; does not call Stellar live.
+Auth: `AI_DATA_API_TOKEN` required (Bearer / `X-AI-Data-Token`); if unset → **503** (no localhost bypass). Read-only; does not call Stellar live.
 
 ## Docs map for agents
 
