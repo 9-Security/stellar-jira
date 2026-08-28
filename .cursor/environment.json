@@ -1,0 +1,12 @@
+{
+  "name": "stellar-jira (xMDR / AIxSOC)",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "stellar-soc-api",
+      "command": "cd /workspace && HOST=127.0.0.1 PORT=8000 ./serve_api"
+    }
+  ],
+  "ports": [8000]
+}
