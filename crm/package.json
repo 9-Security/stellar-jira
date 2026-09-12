@@ -1,0 +1,33 @@
+{
+  "name": "nine-crm",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @crm/web",
+    "build": "npm run build -w @crm/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "npm run generate -w @crm/db",
+    "db:migrate": "bash scripts/with-root-env.sh npm run migrate -w @crm/db",
+    "db:migrate:dev": "bash scripts/with-root-env.sh npm run migrate:dev -w @crm/db",
+    "db:seed": "bash scripts/with-root-env.sh npm run seed -w @crm/db",
+    "postinstall": "npm run generate -w @crm/db"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

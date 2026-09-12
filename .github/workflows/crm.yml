@@ -1,0 +1,50 @@
+name: CRM
+
+on:
+  push:
+    paths:
+      - 'crm/**'
+      - '.github/workflows/crm.yml'
+  pull_request:
+    paths:
+      - 'crm/**'
+      - '.github/workflows/crm.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: crm
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+          POSTGRES_DB: crm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crm -d crm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://crm:crm@localhost:5432/crm_test
+      AUTH_SECRET: ci-secret-ci-secret-ci-secret-ci-32
+      AUTH_URL: http://localhost:3000
+      SEED_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: crm/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run db:migrate
+      - run: npm test

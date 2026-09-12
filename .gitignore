@@ -18,5 +18,10 @@ reports/.cache/
 web/node_modules/
 web/dist/
 web/tsconfig.tsbuildinfo
+crm/node_modules/
+crm/.env
+crm/apps/web/.next/
+crm/apps/web/tsconfig.tsbuildinfo
+crm/packages/db/src/generated/
 .tools/
 .cloudflare/

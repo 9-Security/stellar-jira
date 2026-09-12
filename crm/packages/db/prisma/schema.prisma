@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  sales
+  support
+  engineering
+}
+
+enum MembershipStatus {
+  active
+  disabled
+}
+
+enum OpportunityStage {
+  lead
+  negotiating
+  quoted
+  won
+  lost
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  pending_reply
+  resolved
+  closed
+}
+
+enum ScheduleStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum ScheduleType {
+  field_work
+  booking
+}
+
+enum ActivityStatus {
+  todo
+  done
+}
+
+enum Priority {
+  low
+  medium
+  high
+  critical
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  timezone  String   @default("Asia/Taipei")
+  workdays  Json     @default("[1,2,3,4,5]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships         Membership[]
+  invites             Invite[]
+  companies           Company[]
+  contacts            Contact[]
+  opportunities       Opportunity[]
+  activities          Activity[]
+  tickets             Ticket[]
+  ticketComments      TicketComment[]
+  schedules           Schedule[]
+  ticketScheduleLinks TicketScheduleLink[]
+  tags                Tag[]
+  taggings            Tagging[]
+  statusEvents        StatusEvent[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+model Membership {
+  id        String           @id @default(cuid())
+  tenantId  String
+  userId    String
+  role      Role
+  status    MembershipStatus @default(active)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  ownedCompanies     Company[]     @relation("CompanyOwner")
+  ownedContacts      Contact[]     @relation("ContactOwner")
+  ownedOpportunities Opportunity[] @relation("OpportunityOwner")
+  ownedActivities    Activity[]    @relation("ActivityOwner")
+  assignedTickets    Ticket[]      @relation("TicketAssignee")
+  assignedSchedules  Schedule[]    @relation("ScheduleAssignee")
+  ticketComments     TicketComment[]
+  createdInvites     Invite[]
+  statusEvents       StatusEvent[]
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Invite {
+  id                    String    @id @default(cuid())
+  tenantId              String
+  email                 String
+  role                  Role
+  tokenHash             String    @unique
+  expiresAt             DateTime
+  acceptedAt            DateTime?
+  createdByMembershipId String
+  createdAt             DateTime  @default(now())
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy Membership @relation(fields: [createdByMembershipId], references: [id])
+
+  @@index([tenantId, email])
+}
+
+model Company {
+  id                String    @id @default(cuid())
+  tenantId          String
+  name              String
+  website           String?
+  phone             String?
+  notes             String?
+  ownerMembershipId String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner  Membership? @relation("CompanyOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+
+  contacts      Contact[]
+  opportunities Opportunity[]
+  activities    Activity[]
+  tickets       Ticket[]
+
+  @@index([tenantId, updatedAt])
+  @@index([tenantId, name])
+}
+
+model Contact {
+  id                String   @id @default(cuid())
+  tenantId          String
+  companyId         String?
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  ownerMembershipId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  owner   Membership? @relation("ContactOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+
+  opportunities Opportunity[]
+  activities    Activity[]
+  tickets       Ticket[]
+
+  @@index([tenantId, updatedAt])
+}
+
+model Opportunity {
+  id                String           @id @default(cuid())
+  tenantId          String
+  companyId         String?
+  contactId         String?
+  title             String
+  amount            Decimal?         @db.Decimal(14, 2)
+  stage             OpportunityStage @default(lead)
+  ownerMembershipId String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  owner   Membership? @relation("OpportunityOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+
+  activities Activity[]
+  tickets    Ticket[]
+
+  @@index([tenantId, stage])
+  @@index([tenantId, updatedAt])
+}
+
+model Activity {
+  id                String         @id @default(cuid())
+  tenantId          String
+  title             String
+  status            ActivityStatus @default(todo)
+  dueAt             DateTime?
+  companyId         String?
+  contactId         String?
+  opportunityId     String?
+  ownerMembershipId String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact     Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  owner       Membership?  @relation("ActivityOwner", fields: [ownerMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, updatedAt])
+}
+
+model Ticket {
+  id                   String       @id @default(cuid())
+  tenantId             String
+  title                String
+  description          String?
+  status               TicketStatus @default(open)
+  priority             Priority     @default(medium)
+  companyId            String?
+  contactId            String?
+  opportunityId        String?
+  assigneeMembershipId String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company     Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact     Contact?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  opportunity Opportunity?         @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  assignee    Membership?          @relation("TicketAssignee", fields: [assigneeMembershipId], references: [id], onDelete: SetNull)
+  comments    TicketComment[]
+  scheduleLinks TicketScheduleLink[]
+
+  @@index([tenantId, status, assigneeMembershipId])
+  @@index([tenantId, updatedAt])
+}
+
+model TicketComment {
+  id                 String   @id @default(cuid())
+  tenantId           String
+  ticketId           String
+  authorMembershipId String
+  body               String
+  isInternal         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author Membership @relation(fields: [authorMembershipId], references: [id])
+
+  @@index([tenantId, ticketId])
+}
+
+model Schedule {
+  id                   String         @id @default(cuid())
+  tenantId             String
+  title                String
+  type                 ScheduleType   @default(booking)
+  status               ScheduleStatus @default(scheduled)
+  startAt              DateTime
+  endAt                DateTime
+  assigneeMembershipId String?
+  notes                String?
+  cancelReason         String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignee   Membership?          @relation("ScheduleAssignee", fields: [assigneeMembershipId], references: [id], onDelete: SetNull)
+  ticketLinks TicketScheduleLink[]
+
+  @@index([tenantId, assigneeMembershipId, startAt])
+  @@index([tenantId, updatedAt])
+}
+
+model TicketScheduleLink {
+  id         String   @id @default(cuid())
+  tenantId   String
+  ticketId   String
+  scheduleId String
+  createdAt  DateTime @default(now())
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  schedule Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([ticketId, scheduleId])
+  @@index([tenantId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taggings Tagging[]
+
+  @@unique([tenantId, name])
+}
+
+model Tagging {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tagId      String
+  entityType String
+  entityId   String
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, entityType, entityId])
+  @@index([tenantId])
+}
+
+model StatusEvent {
+  id                String   @id @default(cuid())
+  tenantId          String
+  entityType        String
+  entityId          String
+  fromStatus        String?
+  toStatus          String
+  actorMembershipId String?
+  createdAt         DateTime @default(now())
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  Membership? @relation(fields: [actorMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, entityType, entityId])
+}
