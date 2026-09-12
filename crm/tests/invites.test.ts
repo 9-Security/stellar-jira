@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { InviteError, invitesRepo, prisma } from '@crm/db';
 import { createTenantUser } from './helpers';
@@ -5,16 +6,17 @@ import { createTenantUser } from './helpers';
 describe('invites', () => {
   it('accepts a token once, then rejects reuse', async () => {
     const admin = await createTenantUser('admin');
+    const email = `newbie-${randomUUID().slice(0, 8)}@test.local`;
     const { rawToken } = await invitesRepo.createInvite({
       tenantId: admin.tenant.id,
-      email: 'newbie@test.local',
+      email,
       role: 'sales',
       createdByMembershipId: admin.membership.id,
     });
 
     const newbie = await prisma.user.create({
       data: {
-        email: 'newbie@test.local',
+        email,
         name: 'Newbie',
         passwordHash: 'x',
       },
@@ -31,9 +33,10 @@ describe('invites', () => {
 
   it('rejects expired tokens', async () => {
     const admin = await createTenantUser('admin');
+    const email = `late-${randomUUID().slice(0, 8)}@test.local`;
     const { invite, rawToken } = await invitesRepo.createInvite({
       tenantId: admin.tenant.id,
-      email: 'late@test.local',
+      email,
       role: 'support',
       createdByMembershipId: admin.membership.id,
     });
@@ -42,7 +45,7 @@ describe('invites', () => {
       data: { expiresAt: new Date(Date.now() - 1000) },
     });
     const late = await prisma.user.create({
-      data: { email: 'late@test.local', name: 'Late', passwordHash: 'x' },
+      data: { email, name: 'Late', passwordHash: 'x' },
     });
     await expect(invitesRepo.acceptInvite(rawToken, late.id)).rejects.toMatchObject({
       message: 'Invite expired',

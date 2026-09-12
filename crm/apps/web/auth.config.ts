@@ -3,6 +3,7 @@ import type { NextAuthConfig } from 'next-auth';
 /** Edge-safe config (no Prisma). Used by middleware. */
 export const authConfig = {
   trustHost: true,
+  secret: process.env.AUTH_SECRET,
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
   providers: [],
