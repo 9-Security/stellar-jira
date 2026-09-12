@@ -40,6 +40,8 @@ npm run db:seed
 npm run dev                   # http://localhost:3000
 ```
 
+`npm run dev` / `build` 會從 repo 根目錄的 `crm/.env` 注入 `DATABASE_URL` 與 `AUTH_SECRET`（Next 預設只讀 `apps/web/.env`）。
+
 沒有 Docker 時，把 `DATABASE_URL` 指到本機 Postgres，並先建立資料庫 `crm`。
 
 ### Seed 帳號（密碼皆 `Password123!`）
